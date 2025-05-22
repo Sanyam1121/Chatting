@@ -1,15 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" >
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Professional Firebase Group Chat</title>
-  <!-- Tailwind CSS for styling -->
+  <title>Firebase Group Chat</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Emoji Picker -->
   <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.min.js"></script>
-
-  <!-- Firebase v10 Modules (ES Module style) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
@@ -20,12 +16,13 @@
       query,
       orderBy,
       doc,
+      setDoc,
       deleteDoc,
+      getDocs,
       updateDoc,
       serverTimestamp,
-      getDocs,
-      arrayUnion,
-      arrayRemove
+      where,
+      getDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import {
       getStorage,
@@ -34,40 +31,36 @@
       getDownloadURL,
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
-    // ==== Firebase Configuration ====
+    // --- Your Firebase config here ---
     const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_AUTH_DOMAIN",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_STORAGE_BUCKET",
-      messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-      appId: "YOUR_APP_ID",
-      measurementId: "YOUR_MEASUREMENT_ID"
+      apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
+      authDomain: "chatting-fd641.firebaseapp.com",
+      projectId: "chatting-fd641",
+      storageBucket: "chatting-fd641.appspot.com",
+      messagingSenderId: "535384451291",
+      appId: "1:535384451291:web:828f60686d81be018b44fe",
+      measurementId: "G-RKS4CFZPJ4",
     };
 
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const storage = getStorage(app);
 
-    // Global variables
     let username = "";
     let currentGroupId = null;
     let selectedImage = null;
     let typingTimeout = null;
-    let isTyping = false;
 
-    // UI Elements shortcuts
+    // DOM Elements
     const loginPage = () => document.getElementById("loginPage");
     const groupsPage = () => document.getElementById("groupsPage");
     const chatPage = () => document.getElementById("chatPage");
     const groupsList = () => document.getElementById("groupsList");
     const messagesList = () => document.getElementById("messages");
-    const typingIndicator = () => document.getElementById("typingIndicator");
-    const groupTitle = () => document.getElementById("groupTitle");
     const currentUserLabel = () => document.getElementById("currentUserLabel");
+    const groupTitle = () => document.getElementById("groupTitle");
+    const typingIndicator = () => document.getElementById("typingIndicator");
 
-    // Show a single page and hide others
     function showPage(page) {
       loginPage().classList.add("hidden");
       groupsPage().classList.add("hidden");
@@ -75,48 +68,43 @@
       page.classList.remove("hidden");
     }
 
-    // Login with username only
     function login() {
       const nameInput = document.getElementById("usernameInput");
-      username = nameInput.value.trim();
-      if (!username) {
-        alert("Please enter a username.");
-        return;
-      }
+      const name = nameInput.value.trim();
+      if (!name) return alert("Enter a username");
+      username = name;
       nameInput.value = "";
+      currentUserLabel().textContent = `Logged in as: ${username}`;
       showPage(groupsPage());
       loadGroups();
-      currentUserLabel().textContent = `Logged in as: ${username}`;
     }
 
-    // Load groups from Firestore and listen in realtime
     async function loadGroups() {
+      groupsList().innerHTML = "Loading groups...";
       const groupsRef = collection(db, "groups");
       onSnapshot(groupsRef, (snapshot) => {
         groupsList().innerHTML = "";
         if (snapshot.empty) {
-          groupsList().innerHTML = "<p class='text-gray-500 dark:text-gray-400'>No groups available. Create one!</p>";
+          groupsList().innerHTML = "<p class='text-gray-500 dark:text-gray-400'>No groups yet. Create one!</p>";
           return;
         }
         snapshot.forEach((docSnap) => {
           const group = docSnap.data();
-          const groupId = docSnap.id;
           const container = document.createElement("div");
-          container.className = "p-3 border rounded mb-2 flex justify-between items-center cursor-pointer hover:bg-blue-100 dark:hover:bg-gray-700";
+          container.className = "p-3 border rounded mb-2 flex justify-between items-center hover:bg-blue-100 dark:hover:bg-gray-700 cursor-pointer";
 
           const nameDiv = document.createElement("div");
           nameDiv.textContent = group.name;
           nameDiv.className = "flex-1";
-          nameDiv.onclick = () => enterGroup(groupId, group.name);
+          nameDiv.onclick = () => enterGroup(docSnap.id, group.name);
 
           const deleteBtn = document.createElement("button");
           deleteBtn.textContent = "❌";
-          deleteBtn.title = "Delete group";
           deleteBtn.className = "ml-2 text-red-600 hover:text-red-800 text-sm";
           deleteBtn.onclick = async (e) => {
             e.stopPropagation();
-            if (confirm(`Are you sure you want to delete the group "${group.name}"? This action cannot be undone.`)) {
-              await deleteGroup(groupId);
+            if (confirm(`Delete group "${group.name}"?`)) {
+              await deleteGroup(docSnap.id);
             }
           };
 
@@ -124,372 +112,272 @@
           container.appendChild(deleteBtn);
           groupsList().appendChild(container);
         });
-      }, (error) => {
-        console.error("Error loading groups:", error);
       });
     }
 
-    // Delete group and all its messages
     async function deleteGroup(groupId) {
       try {
-        // Delete all messages in group
+        // Delete all messages first
         const messagesRef = collection(db, "groups", groupId, "messages");
         const messagesSnap = await getDocs(messagesRef);
-        const deletePromises = messagesSnap.docs.map(doc => deleteDoc(doc.ref));
+        const deletePromises = messagesSnap.docs.map((doc) => deleteDoc(doc.ref));
         await Promise.all(deletePromises);
-        // Delete the group doc
+
+        // Delete typing doc if exists
+        await deleteDoc(doc(db, "groups", groupId, "typing", username));
+
+        // Delete group
         await deleteDoc(doc(db, "groups", groupId));
         alert("Group deleted successfully.");
-        if(currentGroupId === groupId) backToGroups();
       } catch (error) {
         console.error("Error deleting group:", error);
-        alert("Failed to delete group. See console for details.");
+        alert("Failed to delete group.");
       }
     }
 
-    // Create a new group
     async function createGroup() {
       const groupNameInput = document.getElementById("newGroupName");
       const name = groupNameInput.value.trim();
-      if (!name) {
-        alert("Enter a group name.");
-        return;
-      }
-      try {
-        await addDoc(collection(db, "groups"), {
-          name,
-          createdAt: serverTimestamp(),
-        });
-        groupNameInput.value = "";
-      } catch (error) {
-        console.error("Error creating group:", error);
-        alert("Failed to create group. See console for details.");
-      }
+      if (!name) return alert("Enter a group name");
+      await addDoc(collection(db, "groups"), {
+        name,
+        createdAt: serverTimestamp(),
+      });
+      groupNameInput.value = "";
     }
 
-    // Enter a group and start listening to messages
-    function enterGroup(groupId, groupName) {
+    async function enterGroup(groupId, groupName) {
       currentGroupId = groupId;
       groupTitle().textContent = groupName;
       showPage(chatPage());
-      loadMessages(groupId);
-      setupTypingListener(groupId);
+      listenToMessages(groupId);
+      listenToTyping(groupId);
     }
 
-    // Back to groups page
-    function backToGroups() {
-      currentGroupId = null;
-      showPage(groupsPage());
-      typingIndicator().textContent = "";
+    async function sendMessage() {
+      if (!currentGroupId) return alert("No group selected");
+      const textInput = document.getElementById("messageInput");
+      const text = textInput.value.trim();
+      if (!text && !selectedImage) return;
+
+      let imageUrl = null;
+      if (selectedImage) {
+        const storageRef = ref(storage, `images/${Date.now()}-${selectedImage.name}`);
+        await uploadBytes(storageRef, selectedImage);
+        imageUrl = await getDownloadURL(storageRef);
+        selectedImage = null;
+        document.getElementById("imageInput").value = "";
+      }
+
+      await addDoc(collection(db, "groups", currentGroupId, "messages"), {
+        username,
+        text: text || null,
+        imageUrl: imageUrl || null,
+        timestamp: serverTimestamp(),
+        readBy: [username],
+      });
+
+      textInput.value = "";
+      updateTyping(false); // user stopped typing after send
     }
 
-    // Load and listen to messages in a group realtime
-    function loadMessages(groupId) {
+    // Listen for messages & update UI
+    function listenToMessages(groupId) {
       const messagesRef = collection(db, "groups", groupId, "messages");
       const q = query(messagesRef, orderBy("timestamp", "asc"));
-
       onSnapshot(q, (snapshot) => {
         messagesList().innerHTML = "";
         snapshot.forEach((docSnap) => {
           const msg = docSnap.data();
-          const msgDiv = document.createElement("div");
+          const div = document.createElement("div");
+          const isOwnMessage = msg.username === username;
+          div.className =
+            `p-2 rounded-lg max-w-[70%] mb-2 flex flex-col ` +
+            (isOwnMessage
+              ? "bg-blue-500 text-white self-end"
+              : "bg-gray-200 text-black self-start dark:bg-gray-700 dark:text-white");
 
-          // Message style: right aligned if sent by current user, left otherwise
-          const isMe = msg.username === username;
-          msgDiv.className = `p-2 rounded-lg max-w-[70%] mb-2 break-words
-            ${isMe ? 'bg-blue-600 text-white self-end' : 'bg-gray-200 text-black dark:bg-gray-700 dark:text-white self-start'}`;
+          const usernameDiv = document.createElement("div");
+          usernameDiv.textContent = msg.username;
+          usernameDiv.className = "text-xs opacity-70 mb-1";
+          div.appendChild(usernameDiv);
 
-          // Message sender and content
-          msgDiv.innerHTML = `
-            <div class="text-xs opacity-70 mb-1">${msg.username}</div>
-            ${msg.text ? `<div>${sanitize(msg.text)}</div>` : ''}
-            ${msg.imageUrl ? `<img src="${msg.imageUrl}" alt="Image" class="mt-2 rounded shadow max-w-[200px]" />` : ''}
-            <div class="text-xs mt-1 opacity-50">${msg.timestamp ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString() : ''}</div>
-            <div class="text-xs opacity-60 mt-1">${renderReadReceipts(msg.seenBy || [])}</div>
-          `;
+          if (msg.text) {
+            const textDiv = document.createElement("div");
+            textDiv.textContent = msg.text;
+            div.appendChild(textDiv);
+          }
 
-          // Mark message as seen if not sent by current user
-          if (!isMe) markMessageSeen(groupId, docSnap.id);
+          if (msg.imageUrl) {
+            const img = document.createElement("img");
+            img.src = msg.imageUrl;
+            img.className = "mt-2 rounded shadow max-w-[200px]";
+            div.appendChild(img);
+          }
 
-          messagesList().appendChild(msgDiv);
+          // Read receipts display
+          if (msg.readBy) {
+            const readDiv = document.createElement("div");
+            readDiv.className = "text-xs opacity-50 mt-1 self-end";
+            if (isOwnMessage) {
+              readDiv.textContent = `Read by: ${msg.readBy.join(", ")}`;
+              div.appendChild(readDiv);
+            }
+          }
+
+          messagesList().appendChild(div);
         });
-        // Auto scroll to bottom
+
         messagesList().scrollTop = messagesList().scrollHeight;
-      }, (error) => {
-        console.error("Error loading messages:", error);
+
+        // Mark all messages as read by this user
+        markMessagesRead(groupId, snapshot.docs);
       });
     }
 
-    // Sanitize text to prevent XSS
-    function sanitize(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    // Render read receipts as small usernames (excluding current user)
-    function renderReadReceipts(seenBy) {
-      const others = seenBy.filter(u => u !== username);
-      if (others.length === 0) return "";
-      return "Read by: " + others.join(", ");
-    }
-
-    // Mark a message as seen by current user
-    async function markMessageSeen(groupId, messageId) {
-      try {
-        const messageRef = doc(db, "groups", groupId, "messages", messageId);
-        await updateDoc(messageRef, {
-          seenBy: arrayUnion(username),
-        });
-      } catch (error) {
-        console.error("Error marking message as seen:", error);
-      }
-    }
-
-    // Handle image file selection
-    function previewImage(event) {
-      selectedImage = event.target.files[0];
-    }
-
-    // Send message with optional image
-    async function sendMessage() {
-      if (!currentGroupId) {
-        alert("Please join a group first.");
-        return;
-      }
-      const messageInput = document.getElementById("messageInput");
-      const text = messageInput.value.trim();
-
-      if (!text && !selectedImage) return; // Nothing to send
-
-      try {
-        let imageUrl = null;
-        if (selectedImage) {
-          const storageRef = ref(storage, `images/${Date.now()}_${selectedImage.name}`);
-          await uploadBytes(storageRef, selectedImage);
-          imageUrl = await getDownloadURL(storageRef);
-          selectedImage = null;
-          document.getElementById("imageInput").value = "";
-        }
-
-        await addDoc(collection(db, "groups", currentGroupId, "messages"), {
-          username,
-          text: text || null,
-          imageUrl,
-          timestamp: serverTimestamp(),
-          seenBy: [username]
-        });
-
-        messageInput.value = "";
-        updateTypingStatus(false);
-      } catch (error) {
-        console.error("Error sending message:", error);
-        alert("Failed to send message. See console for details.");
-      }
-    }
-
-    // Typing indicator
-
-    // Update typing status in Firestore
-    async function updateTypingStatus(isTypingNow) {
-      if (!currentGroupId) return;
-      const groupRef = doc(db, "groups", currentGroupId);
-      try {
-        await updateDoc(groupRef, {
-          typingUsers: isTypingNow ? arrayUnion(username) : arrayRemove(username)
-        });
-      } catch (error) {
-        // If typingUsers field doesn't exist yet, initialize it
-        if (error.message.includes("NOT_FOUND")) {
-          await updateDoc(groupRef, { typingUsers: [] });
-        } else {
-          console.error("Error updating typing status:", error);
-        }
-      }
-    }
-
-    // Setup realtime listener for typing users in current group
-    function setupTypingListener(groupId) {
-      const groupRef = doc(db, "groups", groupId);
-      onSnapshot(groupRef, (docSnap) => {
-        if (!docSnap.exists()) {
-          typingIndicator().textContent = "";
-          return;
-        }
+    // Mark messages as read by current user
+    async function markMessagesRead(groupId, docs) {
+      const batchPromises = [];
+      docs.forEach(docSnap => {
         const data = docSnap.data();
-        const typingUsers = data.typingUsers || [];
-        const othersTyping = typingUsers.filter(u => u !== username);
-        if (othersTyping.length === 0) {
-          typingIndicator().textContent = "";
-        } else if (othersTyping.length === 1) {
-          typingIndicator().textContent = `${othersTyping[0]} is typing...`;
-        } else {
-          typingIndicator().textContent = `Multiple users are typing...`;
+        if (!data.readBy || !data.readBy.includes(username)) {
+          const refMsg = docSnap.ref;
+          batchPromises.push(updateDoc(refMsg, {
+            readBy: [...(data.readBy || []), username]
+          }));
         }
+      });
+      await Promise.all(batchPromises);
+    }
+
+    // Typing indicator handling
+    const typingDocId = () => username;
+
+    async function updateTyping(isTyping) {
+      if (!currentGroupId) return;
+      const typingRef = doc(db, "groups", currentGroupId, "typing", typingDocId());
+      if (isTyping) {
+        await setDoc(typingRef, { username, timestamp: serverTimestamp() });
+      } else {
+        await deleteDoc(typingRef).catch(() => {}); // ignore if doesn't exist
+      }
+    }
+
+    function listenToTyping(groupId) {
+      const typingCol = collection(db, "groups", groupId, "typing");
+      onSnapshot(typingCol, (snapshot) => {
+        const typingUsers = [];
+        snapshot.forEach(docSnap => {
+          const u = docSnap.data().username;
+          if (u !== username) typingUsers.push(u);
+        });
+        typingIndicator().textContent = typingUsers.length > 0 ? `${typingUsers.join(", ")} typing...` : "";
       });
     }
 
-    // Handle keypress in message input to update typing status
-    function handleTyping() {
-      if (!isTyping) {
-        isTyping = true;
-        updateTypingStatus(true);
-      }
-      clearTimeout(typingTimeout);
-      typingTimeout = setTimeout(() => {
-        isTyping = false;
-        updateTypingStatus(false);
-      }, 1500);
+    // Setup typing input events with debounce
+    function setupTypingInput() {
+      const input = document.getElementById("messageInput");
+      input.addEventListener("input", () => {
+        updateTyping(true);
+        if (typingTimeout) clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => updateTyping(false), 1500);
+      });
     }
 
-    // Dark Mode Toggle
+    // Image input change handler
+    function handleImageChange(event) {
+      selectedImage = event.target.files[0] || null;
+    }
+
+    // Dark mode toggle
     function toggleDarkMode() {
       document.documentElement.classList.toggle("dark");
-      // Save preference
-      if(document.documentElement.classList.contains("dark")){
-        localStorage.setItem("darkMode", "true");
+      const btn = document.getElementById("darkModeToggle");
+      if (document.documentElement.classList.contains("dark")) {
+        btn.textContent = "🌞 Light Mode";
       } else {
-        localStorage.removeItem("darkMode");
+        btn.textContent = "🌙 Dark Mode";
       }
     }
 
-    // On page load, set dark mode from preference
-    window.onload = () => {
-      if (localStorage.getItem("darkMode") === "true") {
-        document.documentElement.classList.add("dark");
-      }
-    };
-
-    // Keyboard shortcut: Enter to send message
-    function handleKeyDown(event) {
-      if(event.key === "Enter" && !event.shiftKey){
-        event.preventDefault();
-        sendMessage();
-      }
-    }
-
-    // Emoji Picker Setup
-    const emojiPicker = new EmojiButton({
-      position: "top-end"
-    });
-
+    // Emoji picker
+    let picker;
     function setupEmojiPicker() {
       const button = document.getElementById("emojiBtn");
       const input = document.getElementById("messageInput");
-      emojiPicker.on("emoji", emoji => {
+      picker = new EmojiButton({
+        position: "top-start",
+        theme: "auto",
+      });
+      picker.on("emoji", emoji => {
         input.value += emoji;
         input.focus();
       });
-      button.addEventListener("click", () => emojiPicker.togglePicker(button));
+      button.addEventListener("click", () => picker.togglePicker(button));
     }
 
-    // Initialize everything after DOM ready
-    document.addEventListener("DOMContentLoaded", () => {
+    // Initialize after DOM loaded
+    window.onload = () => {
       showPage(loginPage());
+      setupTypingInput();
       setupEmojiPicker();
-    });
-
-    // Expose functions to global scope for inline handlers
-    window.login = login;
-    window.createGroup = createGroup;
-    window.enterGroup = enterGroup;
-    window.backToGroups = backToGroups;
-    window.previewImage = previewImage;
-    window.sendMessage = sendMessage;
-    window.handleTyping = handleTyping;
-    window.toggleDarkMode = toggleDarkMode;
-    window.handleKeyDown = handleKeyDown;
-
+      document.getElementById("darkModeToggle").addEventListener("click", toggleDarkMode);
+      document.getElementById("imageInput").addEventListener("change", handleImageChange);
+    };
   </script>
 
   <style>
-    /* Dark mode body background */
     html.dark {
-      background-color: #1a202c;
-      color: #e2e8f0;
+      background-color: #121212;
+      color: #e0e0e0;
     }
-    /* Scrollbar style */
-    #messages {
-      scrollbar-width: thin;
-      scrollbar-color: #a0aec0 transparent;
-    }
-    #messages::-webkit-scrollbar {
-      width: 8px;
-    }
-    #messages::-webkit-scrollbar-thumb {
-      background-color: #a0aec0;
-      border-radius: 4px;
+    .dark input, .dark textarea, .dark select {
+      background-color: #1f1f1f;
+      color: #e0e0e0;
+      border-color: #444;
     }
   </style>
 </head>
-<body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col h-screen">
+<body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen flex flex-col">
 
   <!-- LOGIN PAGE -->
-  <main id="loginPage" class="flex flex-col justify-center items-center flex-grow p-4">
-    <h1 class="text-4xl font-bold mb-6">Welcome to Group Chat</h1>
-    <input id="usernameInput" type="text" placeholder="Enter your username" maxlength="20"
-      class="border border-gray-300 rounded p-2 mb-4 w-64 dark:bg-gray-700 dark:border-gray-600" />
-    <button onclick="login()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded">
-      Join Chat
-    </button>
-  </main>
+  <div id="loginPage" class="flex flex-col items-center justify-center min-h-screen px-4">
+    <h1 class="text-3xl font-bold mb-6">Enter Your Name to Join</h1>
+    <input id="usernameInput" placeholder="Username" class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 mb-4 w-full max-w-xs focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400" />
+    <button onclick="login()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded shadow transition">Login</button>
+  </div>
 
   <!-- GROUPS PAGE -->
-  <section id="groupsPage" class="hidden flex flex-col flex-grow p-4 max-w-3xl mx-auto w-full">
+  <div id="groupsPage" class="hidden p-4 max-w-3xl mx-auto flex flex-col flex-grow">
     <header class="flex justify-between items-center mb-4">
-      <h2 class="text-2xl font-semibold">Groups</h2>
-      <button onclick="toggleDarkMode()" title="Toggle Dark Mode" aria-label="Toggle Dark Mode"
-        class="p-2 rounded hover:bg-gray-300 dark:hover:bg-gray-700">
-        🌙
-      </button>
+      <h2 class="text-2xl font-bold">Groups</h2>
+      <button id="darkModeToggle" class="px-3 py-1 rounded border dark:border-gray-600">🌙 Dark Mode</button>
     </header>
-
-    <div class="mb-4">
-      <input id="newGroupName" type="text" placeholder="New group name" maxlength="30"
-        class="border border-gray-300 rounded p-2 w-full dark:bg-gray-700 dark:border-gray-600" />
-      <button onclick="createGroup()" class="mt-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded w-full">
-        Create Group
-      </button>
+    <div id="currentUserLabel" class="mb-3 opacity-70">Logged in as: </div>
+    <div class="flex mb-4 space-x-2">
+      <input id="newGroupName" placeholder="New Group Name" class="flex-grow border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400" />
+      <button onclick="createGroup()" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded transition">Create</button>
     </div>
-
-    <div id="groupsList" class="overflow-auto flex-grow border border-gray-300 rounded p-2 dark:border-gray-600">
-      <!-- Groups listed here -->
-    </div>
-
-    <footer class="mt-4 text-sm opacity-60">
-      Logged in as: <span id="currentUserLabel" class="font-semibold"></span>
-    </footer>
-  </section>
+    <div id="groupsList" class="overflow-auto max-h-[400px] border border-gray-300 dark:border-gray-600 rounded p-2"></div>
+  </div>
 
   <!-- CHAT PAGE -->
-  <section id="chatPage" class="hidden flex flex-col flex-grow max-w-4xl mx-auto w-full p-4">
-    <header class="flex justify-between items-center mb-4 border-b border-gray-300 dark:border-gray-600 pb-2">
-      <button onclick="backToGroups()" class="text-blue-600 hover:text-blue-800 font-semibold">&larr; Back</button>
-      <h2 id="groupTitle" class="text-2xl font-semibold truncate max-w-[70%]"></h2>
-      <button onclick="toggleDarkMode()" title="Toggle Dark Mode" aria-label="Toggle Dark Mode"
-        class="p-2 rounded hover:bg-gray-300 dark:hover:bg-gray-700">
-        🌙
-      </button>
+  <div id="chatPage" class="hidden flex flex-col flex-grow max-w-3xl mx-auto p-4">
+    <header class="flex justify-between items-center mb-3">
+      <h2 id="groupTitle" class="text-2xl font-bold"></h2>
+      <button onclick="showPage(groupsPage())" class="text-sm text-blue-600 hover:underline">Back to Groups</button>
     </header>
-
-    <main id="messages" class="flex-grow overflow-auto flex flex-col gap-2 mb-2 px-2"></main>
-
-    <div id="typingIndicator" class="text-sm italic opacity-60 mb-1 h-5 px-2"></div>
-
-    <form onsubmit="event.preventDefault(); sendMessage();" class="flex items-center gap-2 px-2">
-      <button type="button" id="emojiBtn" title="Emoji Picker" class="text-xl px-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded">😊</button>
-      <textarea id="messageInput" rows="1" placeholder="Type your message..." maxlength="500"
-        class="flex-grow resize-none border border-gray-300 rounded p-2 dark:bg-gray-700 dark:border-gray-600"
-        oninput="handleTyping()" onkeydown="handleKeyDown(event)"></textarea>
-
-      <label for="imageInput" class="cursor-pointer px-2 text-xl hover:bg-gray-200 dark:hover:bg-gray-700 rounded" title="Send Image">📷</label>
-      <input id="imageInput" type="file" accept="image/*" class="hidden" onchange="previewImage(event)" />
-
-      <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
-        Send
-      </button>
+    <div id="messages" class="flex-grow overflow-auto p-2 border border-gray-300 dark:border-gray-600 rounded mb-2 bg-gray-50 dark:bg-gray-800"></div>
+    <div id="typingIndicator" class="text-sm italic text-gray-500 dark:text-gray-400 h-5 mb-1"></div>
+    <form onsubmit="event.preventDefault(); sendMessage();" class="flex space-x-2 items-center">
+      <button type="button" id="emojiBtn" class="text-2xl">😀</button>
+      <input id="messageInput" type="text" placeholder="Type a message..." autocomplete="off" class="flex-grow border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400" />
+      <input id="imageInput" type="file" accept="image/*" class="hidden" />
+      <label for="imageInput" class="cursor-pointer text-blue-600 hover:underline text-sm">📷</label>
+      <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded transition">Send</button>
     </form>
-  </section>
+  </div>
 
 </body>
 </html>
