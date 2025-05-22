@@ -1,51 +1,33 @@
-const express = require('express');
+const express = require("express");
 const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http);
+const http = require("http").createServer(app);
+const io = require("socket.io")(http);
 
-app.use(express.static('public'));
+app.use(express.static("public"));
 
-let users = {};
+let users = [];
 
-io.on('connection', socket => {
-  if (Object.keys(users).length >= 2) {
-    // Room full, disconnect
-    socket.emit('room full');
-    socket.disconnect();
-    return;
-  }
-
-  socket.on('join', ({ username, pfp }) => {
-    users[socket.id] = { username, pfp };
-    io.emit('user list', Object.values(users));
-    io.emit('online status', Object.values(users).length === 2 ? 'Online' : 'Waiting for other user...');
+io.on("connection", socket => {
+  socket.on("join", ({ username, pfp }) => {
+    if (users.length >= 2) return;
+    users.push({ id: socket.id, username, pfp });
+    socket.broadcast.emit("user-joined", { username, pfp });
   });
 
-  socket.on('chat message', ({ msg, username, pfp }) => {
-    io.emit('chat message', {
-      msg,
-      username,
-      pfp,
-      time: new Date().toISOString()
-    });
+  socket.on("message", data => {
+    socket.broadcast.emit("message", data);
   });
 
-  socket.on('typing', ({ username }) => {
-    socket.broadcast.emit('typing', username);
+  socket.on("typing", data => {
+    socket.broadcast.emit("typing", data);
   });
 
-  socket.on('stopTyping', () => {
-    socket.broadcast.emit('stopTyping');
-  });
-
-  socket.on('disconnect', () => {
-    delete users[socket.id];
-    io.emit('user list', Object.values(users));
-    io.emit('online status', Object.values(users).length === 2 ? 'Online' : 'Waiting for other user...');
+  socket.on("disconnect", () => {
+    users = users.filter(u => u.id !== socket.id);
+    socket.broadcast.emit("user-left");
   });
 });
 
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+http.listen(3000, () => {
+  console.log("Server running on http://localhost:3000");
 });
