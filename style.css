@@ -136,3 +136,19 @@ body {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
+#pfp-preview {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  margin-bottom: 15px;
+  object-fit: cover;
+  border: 2px solid #007aff;
+  background: #fff;
+}
+
+#pfp-upload {
+  width: 100%;
+  margin-bottom: 15px;
+  border: none;
+}
+
