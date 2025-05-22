@@ -2,269 +2,161 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Two Person Chat - Enhanced</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>iPhone Chat UI</title>
+  <script src="/socket.io/socket.io.js"></script>
   <style>
-  body {
-  margin: 0;
-  padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background: #f2f2f7;
-}
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f2f2f7;
+    }
 
-.chat-container {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  max-width: 600px;
-  margin: auto;
-  border-left: 1px solid #ccc;
-  border-right: 1px solid #ccc;
-  background: white;
-}
+    .chat-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      max-width: 600px;
+      margin: auto;
+      border-left: 1px solid #ccc;
+      border-right: 1px solid #ccc;
+      background: white;
+    }
 
-#chatBox {
-  flex: 1;
-  overflow-y: auto;
-  padding: 15px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
+    #chatBox {
+      flex: 1;
+      overflow-y: auto;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
 
-.message {
-  display: flex;
-  align-items: flex-end;
-  max-width: 80%;
-}
+    .message {
+      display: flex;
+      align-items: flex-end;
+      max-width: 80%;
+    }
 
-.message img {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  margin: 0 10px;
-}
+    .message img {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      margin: 0 10px;
+    }
 
-.message .bubble {
-  padding: 10px 14px;
-  border-radius: 20px;
-  font-size: 15px;
-  line-height: 1.4;
-  position: relative;
-}
+    .message .bubble {
+      padding: 10px 14px;
+      border-radius: 20px;
+      font-size: 15px;
+      line-height: 1.4;
+      position: relative;
+    }
 
-.message .time {
-  font-size: 11px;
-  margin-top: 4px;
-  opacity: 0.6;
-}
+    .message .time {
+      font-size: 11px;
+      margin-top: 4px;
+      opacity: 0.6;
+    }
 
-.message.self {
-  align-self: flex-end;
-  flex-direction: row-reverse;
-}
+    .message.self {
+      align-self: flex-end;
+      flex-direction: row-reverse;
+    }
 
-.message.self .bubble {
-  background-color: #007aff;
-  color: white;
-  border-bottom-right-radius: 4px;
-}
+    .message.self .bubble {
+      background-color: #007aff;
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
 
-.message:not(.self) .bubble {
-  background-color: #e5e5ea;
-  color: black;
-  border-bottom-left-radius: 4px;
-}
+    .message:not(.self) .bubble {
+      background-color: #e5e5ea;
+      color: black;
+      border-bottom-left-radius: 4px;
+    }
 
-.input-area {
-  display: flex;
-  padding: 10px;
-  background: #fff;
-  border-top: 1px solid #ccc;
-}
+    .input-area {
+      display: flex;
+      padding: 10px;
+      background: #fff;
+      border-top: 1px solid #ccc;
+    }
 
-#chatInput {
-  flex: 1;
-  padding: 10px;
-  border-radius: 20px;
-  border: 1px solid #ccc;
-  outline: none;
-  margin-right: 10px;
-}
+    #chatInput {
+      flex: 1;
+      padding: 10px;
+      border-radius: 20px;
+      border: 1px solid #ccc;
+      outline: none;
+      margin-right: 10px;
+    }
 
-button {
-  background-color: #007aff;
-  color: white;
-  padding: 10px 15px;
-  border: none;
-  border-radius: 20px;
-  cursor: pointer;
-}
+    button {
+      background-color: #007aff;
+      color: white;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
 
-<div id="usernameModal">
-  <div class="modal-content">
-    <h2>Enter Your Username</h2>
-    <input type="text" id="usernameInput" maxlength="20" placeholder="Your name" />
-    <br />
-    <label for="pfpInputModal">Select Profile Picture: 👤</label>
-    <input type="file" id="pfpInputModal" accept="image/*" />
-    <br />
-    <button id="startChatBtn" disabled>Start Chat</button>
-  </div>
-</div>
-
-<div class="chat-container" style="display:none;">
-  <div class="chat-header">
-    Two Person Chat
-    <span id="onlineStatus">Offline</span>
-  </div>
-  <div class="chat-box" id="chatBox"></div>
-  <div id="typingIndicator"></div>
-  <div class="chat-input">
-    <label for="pfpInput">👤</label>
-    <input type="file" id="pfpInput" accept="image/*" />
-    <input type="text" id="chatInput" placeholder="Type your message..." autocomplete="off" />
+<div class="chat-container">
+  <div id="chatBox"></div>
+  <div class="input-area">
+    <input type="text" id="chatInput" placeholder="Type a message..." autocomplete="off" />
     <button id="sendBtn">Send</button>
   </div>
 </div>
 
-<audio id="notifSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
-
-<script src="/socket.io/socket.io.js"></script>
 <script>
   const socket = io();
   const chatBox = document.getElementById('chatBox');
   const chatInput = document.getElementById('chatInput');
-  const pfpInput = document.getElementById('pfpInput');
-  const typingIndicator = document.getElementById('typingIndicator');
-  const onlineStatus = document.getElementById('onlineStatus');
-  const notifSound = document.getElementById('notifSound');
   const sendBtn = document.getElementById('sendBtn');
 
-  const usernameModal = document.getElementById('usernameModal');
-  const usernameInput = document.getElementById('usernameInput');
-  const startChatBtn = document.getElementById('startChatBtn');
-  const pfpInputModal = document.getElementById('pfpInputModal');
+  const username = prompt('Enter your name');
+  const pfp = prompt('Paste profile picture URL (or leave empty for default)');
 
-  let username = '';
-  let userPfp = '';
-  let typingTimeout = null;
-  let typing = false;
+  const notifSoundSent = new Audio('sent.mp3');
+  const notifSoundReceived = new Audio('received.mp3');
 
-  // Enable start chat button only if username entered
-  usernameInput.addEventListener('input', () => {
-    startChatBtn.disabled = usernameInput.value.trim() === '';
-  });
-
-  // Read profile pic from modal
-  pfpInputModal.addEventListener('change', e => {
-    const file = e.target.files[0];
-    const reader = new FileReader();
-    reader.onload = () => {
-      userPfp = reader.result;
-    };
-    if (file) reader.readAsDataURL(file);
-  });
-
-  // Start chat button
-  startChatBtn.addEventListener('click', () => {
-    username = usernameInput.value.trim();
-    if (!username) return;
-    usernameModal.style.display = 'none';
-    document.querySelector('.chat-container').style.display = 'flex';
-    onlineStatus.textContent = 'Connecting...';
-
-    updatePfpPreview(userPfp);
-    socket.emit('join', { username, pfp: userPfp });
-  });
-
-  // Update PFP preview in chat input label
-  function updatePfpPreview(src) {
-    if (!src) return;
-    const label = document.querySelector('label[for="pfpInput"]');
-    label.style.backgroundImage = `url('${src}')`;
-    label.style.backgroundSize = 'cover';
-    label.style.borderRadius = '50%';
-    label.style.display = 'inline-block';
-    label.style.width = '32px';
-    label.style.height = '32px';
-    label.style.verticalAlign = 'middle';
-    label.textContent = '';
-  }
-
-  // Handle pfp change during chat
-  pfpInput.addEventListener('change', e => {
-    const file = e.target.files[0];
-    const reader = new FileReader();
-    reader.onload = () => {
-      userPfp = reader.result;
-      updatePfpPreview(userPfp);
-      socket.emit('join', { username, pfp: userPfp }); // Update on server
-    };
-    if (file) reader.readAsDataURL(file);
-  });
-
-  // Typing detection
-  chatInput.addEventListener('input', () => {
-    if (!typing) {
-      typing = true;
-      socket.emit('typing', { username });
-    }
-    clearTimeout(typingTimeout);
-    typingTimeout = setTimeout(() => {
-      typing = false;
-      socket.emit('stopTyping', { username });
-    }, 1000);
-  });
-
-  // Send message
   function sendMessage() {
     const msg = chatInput.value.trim();
     if (!msg) return;
-    socket.emit('chat message', { msg, pfp: userPfp, username });
+    socket.emit('chat message', { msg, username, pfp });
     chatInput.value = '';
-    typing = false;
-    socket.emit('stopTyping', { username });
+    socket.emit('stopTyping');
   }
+
   sendBtn.addEventListener('click', sendMessage);
   chatInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') sendMessage();
+    else socket.emit('typing', username);
   });
 
-  // Show messages
+  chatInput.addEventListener('keyup', () => {
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+      socket.emit('stopTyping');
+    }, 1000);
+  });
+
+  let typingTimeout;
+
   socket.on('chat message', data => {
     addMessage(data);
-    notifSound.play();
+    if (data.username === username) {
+      notifSoundSent.play();
+    } else {
+      notifSoundReceived.play();
+    }
   });
 
-  // Show typing indicator
-  socket.on('typing', usernameTyping => {
-    typingIndicator.textContent = `${usernameTyping} is typing...`;
-  });
-
-  socket.on('stopTyping', () => {
-    typingIndicator.textContent = '';
-  });
-
-  // Online status update
-  socket.on('online status', status => {
-    onlineStatus.textContent = status;
-  });
-
-  // User list update (could be used for future features)
-  socket.on('user list', users => {
-    // Currently unused, but available
-  });
-
-  // Room full handling
-  socket.on('room full', () => {
-    alert('Chat room is full. Only two people can chat here.');
-  });
-
-  // Append message to chatBox
   function addMessage({ msg, username: sender, pfp, time }) {
     const isSelf = sender === username;
     const msgDiv = document.createElement('div');
@@ -287,7 +179,7 @@ button {
 
     const timeSpan = document.createElement('div');
     timeSpan.classList.add('time');
-    timeSpan.textContent = formatTime(time);
+    timeSpan.textContent = formatTime(time || new Date().toISOString());
 
     bubble.appendChild(userSpan);
     bubble.appendChild(textSpan);
