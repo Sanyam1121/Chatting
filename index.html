@@ -64,19 +64,24 @@
     }
   });
 
-  function joinChat() {
-    username = document.getElementById("username").value;
-    pfp = pfpPreview.src;
+function joinChat() {
+  username = document.getElementById("username").value.trim();
+  pfp = document.getElementById("pfp-preview").src;
 
-    if (!username) return alert("Enter your name");
-
-    document.getElementById("user-display").textContent = username;
-    document.getElementById("pfp-display").src = pfp;
-
-    socket.emit("join", { username, pfp });
-    login.classList.add("hidden");
-    chat.classList.remove("hidden");
+  if (!username) {
+    alert("Please enter your name!");
+    return;
   }
+
+  document.getElementById("user-display").textContent = username;
+  document.getElementById("pfp-display").src = pfp;
+
+  socket.emit("join", { username, pfp });
+
+  // Hide login and show chat
+  document.getElementById("login").classList.add("hidden");
+  document.getElementById("chat").classList.remove("hidden");
+}
 
   // ... (rest of your JS remains the same)
 </script>
