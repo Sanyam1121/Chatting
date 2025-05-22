@@ -5,14 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>WhatsApp Style Chat</title>
 
-<!-- Tailwind CSS CDN -->
+<!-- Tailwind CSS -->
 <script src="https://cdn.tailwindcss.com"></script>
 
 <!-- Emoji Button -->
 <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.min.js"></script>
 
 <style>
-  /* WhatsApp style custom tweaks */
   body {
     font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     background: #ece5dd;
@@ -33,7 +32,6 @@
     border-radius: 8px;
     overflow: hidden;
   }
-  /* Sidebar (groups list) */
   #groupsPage {
     width: 320px;
     background: #ffffff;
@@ -99,8 +97,6 @@
     cursor: pointer;
     font-weight: 600;
   }
-
-  /* Chat Page */
   #chatPage {
     flex-grow: 1;
     display: flex;
@@ -131,8 +127,6 @@
     display: flex;
     flex-direction: column;
   }
-
-  /* Message bubbles */
   .message {
     max-width: 60%;
     margin-bottom: 12px;
@@ -168,8 +162,6 @@
     border-radius: 10px;
     margin-top: 5px;
   }
-
-  /* Input area */
   #messageForm {
     background: white;
     padding: 12px 20px;
@@ -209,8 +201,6 @@
     background: #a5d6a7;
     cursor: not-allowed;
   }
-
-  /* Login Section */
   #login-section {
     display: flex;
     height: 100vh;
@@ -246,7 +236,7 @@
   <button id="login-btn">Login</button>
 </div>
 
-<div class="app-container hidden" id="chat-ui" style="display:none;">
+<div class="app-container" id="chat-ui" style="display:none;">
 
   <!-- Groups Sidebar -->
   <div id="groupsPage">
@@ -275,10 +265,10 @@
         placeholder="Type a message"
         autocomplete="off"
       />
-      <label id="emojiBtn" title="Insert emoji" for="dummy" style="user-select:none;">😊</label>
+      <label id="emojiBtn" title="Insert emoji" style="user-select:none;">😊</label>
       <label id="imageInputLabel" title="Attach image" for="imageInput" style="user-select:none;">📎</label>
-      <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="previewImage(event)" />
-      <button id="sendBtn" type="submit">Send</button>
+      <input type="file" id="imageInput" accept="image/*" style="display:none" />
+      <button id="sendBtn" type="submit" disabled>Send</button>
     </form>
   </div>
 
@@ -300,188 +290,307 @@
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   import {
     getStorage,
-    ref,
-    uploadBytes,
+    ref as storageRef,
+    uploadBytesResumable,
     getDownloadURL,
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
+  // Firebase config - REPLACE with your own Firebase config!
   const firebaseConfig = {
-    apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
-    authDomain: "chatting-fd641.firebaseapp.com",
-    projectId: "chatting-fd641",
-    storageBucket: "chatting-fd641.appspot.com",
-    messagingSenderId: "535384451291",
-    appId: "1:535384451291:web:828f60686d81be018b44fe",
-    measurementId: "G-RKS4CFZPJ4",
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_AUTH_DOMAIN",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_STORAGE_BUCKET",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID",
   };
 
+  // Initialize Firebase
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
   const storage = getStorage(app);
 
-  let currentUser = null;
-  let selectedImage = null;
-  let currentGroupId = null;
-
+  // DOM Elements
   const loginSection = document.getElementById("login-section");
-  const chatUI = document.getElementById("chat-ui");
   const usernameInput = document.getElementById("username-input");
   const loginBtn = document.getElementById("login-btn");
+  const chatUI = document.getElementById("chat-ui");
 
   const groupsList = document.getElementById("groupsList");
-  const messagesList = document.getElementById("messages");
-  const currentUserLabel = document.getElementById("currentUserLabel");
-  const groupTitle = document.getElementById("groupTitle");
+  const newGroupForm = document.getElementById("newGroupForm");
+  const newGroupName = document.getElementById("newGroupName");
 
+  const chatPage = document.getElementById("chatPage");
+  const groupTitle = document.getElementById("groupTitle");
+  const messages = document.getElementById("messages");
+  const messageForm = document.getElementById("messageForm");
+  const messageInput = document.getElementById("messageInput");
+  const sendBtn = document.getElementById("sendBtn");
+  const emojiBtn = document.getElementById("emojiBtn");
+  const imageInput = document.getElementById("imageInput");
+  const imageInputLabel = document.getElementById("imageInputLabel");
+  const currentUserLabel = document.getElementById("currentUserLabel");
+
+  let currentUser = "";
+  let currentGroupId = null;
+  let emojiPicker = null;
+
+  // Enable or disable send button based on input
+  function updateSendButton() {
+    sendBtn.disabled = !messageInput.value.trim() && !imageInput.files.length;
+  }
+
+  messageInput.addEventListener("input", updateSendButton);
+  imageInput.addEventListener("change", updateSendButton);
+
+  // Login flow
   loginBtn.addEventListener("click", () => {
-    const name = usernameInput.value.trim();
-    if (!name) {
-      alert("Please enter your name");
+    const username = usernameInput.value.trim();
+    if (username.length < 1) {
+      alert("Please enter your name.");
       return;
     }
-    currentUser = {
-      uid: "user-" + Math.random().toString(36).substring(2, 10),
-      displayName: name,
-    };
+    currentUser = username;
     loginSection.style.display = "none";
     chatUI.style.display = "flex";
-    currentUserLabel.textContent = `You: ${currentUser.displayName}`;
+    currentUserLabel.textContent = currentUser;
     loadGroups();
   });
 
+  // Load groups and listen for changes
   async function loadGroups() {
     groupsList.innerHTML = "Loading groups...";
-    const groupsRef = collection(db, "groups");
-    onSnapshot(groupsRef, (snapshot) => {
+    const groupsQuery = query(collection(db, "groups"), orderBy("createdAt", "asc"));
+
+    onSnapshot(groupsQuery, (snapshot) => {
       groupsList.innerHTML = "";
       if (snapshot.empty) {
-        groupsList.innerHTML = "<p class='text-gray-500'>No groups yet. Create one!</p>";
+        groupsList.innerHTML = "<p class='text-gray-500'>No groups available. Create one!</p>";
         return;
       }
       snapshot.forEach((docSnap) => {
         const group = docSnap.data();
-        const container = document.createElement("div");
-        container.className =
-          "p-3 border rounded mb-2 flex justify-between items-center hover:bg-blue-100 dark:hover:bg-gray-700";
+        const groupId = docSnap.id;
 
-        const nameDiv = document.createElement("div");
-        nameDiv.textContent = group.name;
-        nameDiv.className = "cursor-pointer flex-1";
-        nameDiv.onclick = () => enterGroup(docSnap.id, group.name);
+        const groupDiv = document.createElement("div");
+        groupDiv.textContent = group.name;
+        groupDiv.classList.add("group-item");
+        if (groupId === currentGroupId) groupDiv.classList.add("selected");
+        groupDiv.onclick = () => selectGroup(groupId, group.name);
 
-        const deleteBtn = document.createElement("button");
-        deleteBtn.textContent = "❌";
-        deleteBtn.className = "ml-2 text-red-600 hover:text-red-800 text-sm";
-        deleteBtn.onclick = (e) => {
+        // Delete button
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "×";
+        delBtn.title = "Delete group";
+        delBtn.onclick = async (e) => {
           e.stopPropagation();
-          if (confirm(`Delete group "${group.name}"?`)) {
-            deleteGroup(docSnap.id);
+          if (confirm(`Delete group "${group.name}"? This cannot be undone.`)) {
+            await deleteGroup(groupId);
           }
         };
+        groupDiv.appendChild(delBtn);
 
-        container.appendChild(nameDiv);
-        container.appendChild(deleteBtn);
-        groupsList.appendChild(container);
+        groupsList.appendChild(groupDiv);
       });
     });
   }
 
+  // Create a new group
+  async function createGroup() {
+    const name = newGroupName.value.trim();
+    if (!name) return alert("Group name cannot be empty.");
+    try {
+      await addDoc(collection(db, "groups"), {
+        name,
+        createdAt: serverTimestamp(),
+      });
+      newGroupName.value = "";
+    } catch (error) {
+      console.error("Error creating group:", error);
+      alert("Failed to create group.");
+    }
+  }
+
+  // Delete a group and its messages
   async function deleteGroup(groupId) {
     try {
-      const messagesRef = collection(db, "groups", groupId, "messages");
-      const messagesSnap = await getDocs(messagesRef);
-      const deletePromises = messagesSnap.docs.map((doc) => deleteDoc(doc.ref));
-      await Promise.all(deletePromises);
+      // Delete group doc
       await deleteDoc(doc(db, "groups", groupId));
-      alert("Group deleted successfully.");
+
+      // Delete messages inside group
+      const messagesSnapshot = await getDocs(collection(db, "groups", groupId, "messages"));
+      const batchDeletes = messagesSnapshot.docs.map((msg) => deleteDoc(msg.ref));
+      await Promise.all(batchDeletes);
+
+      if (currentGroupId === groupId) {
+        currentGroupId = null;
+        groupTitle.textContent = "Select a group";
+        messages.innerHTML = "";
+        chatPage.classList.add("hidden");
+      }
     } catch (error) {
       console.error("Error deleting group:", error);
       alert("Failed to delete group.");
     }
   }
 
-  async function createGroup() {
-    const groupNameInput = document.getElementById("newGroupName");
-    const name = groupNameInput.value.trim();
-    if (!name) return alert("Enter a group name");
-    await addDoc(collection(db, "groups"), {
-      name,
-      createdAt: serverTimestamp(),
-    });
-    groupNameInput.value = "";
-  }
-
-  async function enterGroup(groupId, groupName) {
+  // Select group and load messages
+  function selectGroup(groupId, groupName) {
     currentGroupId = groupId;
     groupTitle.textContent = groupName;
-    showChatUI();
-    listenToMessages(groupId);
+
+    // Highlight selected group
+    document.querySelectorAll("#groupsList div").forEach((div) => {
+      div.classList.toggle("selected", div.textContent === groupName);
+    });
+
+    chatPage.classList.remove("hidden");
+    messages.innerHTML = "";
+
+    loadMessages(groupId);
   }
 
-  function showChatUI() {
-    document.getElementById("groupsPage").classList.remove("hidden");
-    document.getElementById("chatPage").classList.remove("hidden");
-    // Hide groups sidebar on mobile or keep visible on desktop
+  // Load and listen for messages in a group
+  function loadMessages(groupId) {
+    // Clear previous listeners if any
+    if (window.unsubscribeMessages) window.unsubscribeMessages();
+
+    const messagesQuery = query(
+      collection(db, "groups", groupId, "messages"),
+      orderBy("timestamp", "asc")
+    );
+
+    window.unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
+      messages.innerHTML = "";
+      snapshot.forEach((docSnap) => {
+        const msg = docSnap.data();
+        displayMessage(msg);
+      });
+      messages.scrollTop = messages.scrollHeight;
+    });
   }
 
-  async function sendMessage() {
-    if (!currentGroupId) return alert("No group selected");
-    const text = document.getElementById("messageInput").value.trim();
-    if (!text && !selectedImage) return;
+  // Display a single message
+  function displayMessage(msg) {
+    const messageDiv = document.createElement("div");
+    messageDiv.classList.add("message");
+    messageDiv.classList.add(msg.sender === currentUser ? "sent" : "received");
 
-    let imageUrl = null;
-
-    if (selectedImage) {
-      const storageRef = ref(storage, "images/" + Date.now() + "-" + selectedImage.name);
-      await uploadBytes(storageRef, selectedImage);
-      imageUrl = await getDownloadURL(storageRef);
-      selectedImage = null;
+    if (msg.sender !== currentUser) {
+      const usernameDiv = document.createElement("div");
+      usernameDiv.classList.add("username");
+      usernameDiv.textContent = msg.sender;
+      messageDiv.appendChild(usernameDiv);
     }
 
-    await addDoc(collection(db, "groups", currentGroupId, "messages"), {
-      uid: currentUser.uid,
-      username: currentUser.displayName,
-      text: text || null,
-      imageUrl: imageUrl || null,
-      timestamp: new Date(),
-    });
+    if (msg.text) {
+      const textDiv = document.createElement("div");
+      textDiv.textContent = msg.text;
+      messageDiv.appendChild(textDiv);
+    }
 
-    document.getElementById("messageInput").value = "";
-    document.getElementById("imageInput").value = "";
+    if (msg.imageUrl) {
+      const img = document.createElement("img");
+      img.src = msg.imageUrl;
+      img.alt = "Image";
+      messageDiv.appendChild(img);
+    }
+
+    messages.appendChild(messageDiv);
   }
 
-  function listenToMessages(groupId) {
-    const messagesRef = collection(db, "groups", groupId, "messages");
-    const q = query(messagesRef, orderBy("timestamp", "asc"));
-    onSnapshot(q, (snapshot) => {
-      messagesList.innerHTML = "";
-      snapshot.forEach((doc) => {
-        const msg = doc.data();
-        const div = document.createElement("div");
-        div.className =
-          "message " +
-          (msg.uid === currentUser.uid ? "sent" : "received");
+  // Send message
+  async function sendMessage() {
+    if (!currentGroupId) return alert("Select a group first.");
+    if (!messageInput.value.trim() && !imageInput.files.length) return;
 
-        div.innerHTML =
-          `<div class="username">${msg.username}</div>` +
-          (msg.text ? `<div>${msg.text}</div>` : "") +
-          (msg.imageUrl ? `<img src="${msg.imageUrl}" alt="image"/>` : "");
+    sendBtn.disabled = true;
 
-        messagesList.appendChild(div);
+    let imageUrl = null;
+    if (imageInput.files.length > 0) {
+      try {
+        imageUrl = await uploadImage(imageInput.files[0]);
+      } catch (err) {
+        alert("Image upload failed");
+        sendBtn.disabled = false;
+        return;
+      }
+    }
+
+    try {
+      await addDoc(collection(db, "groups", currentGroupId, "messages"), {
+        sender: currentUser,
+        text: messageInput.value.trim() || "",
+        imageUrl: imageUrl || null,
+        timestamp: serverTimestamp(),
       });
-      messagesList.scrollTop = messagesList.scrollHeight;
+      messageInput.value = "";
+      imageInput.value = "";
+      updateSendButton();
+    } catch (error) {
+      console.error("Error sending message:", error);
+      alert("Failed to send message.");
+    }
+    sendBtn.disabled = false;
+  }
+
+  // Upload image to Firebase Storage
+  function uploadImage(file) {
+    return new Promise((resolve, reject) => {
+      const ext = file.name.split(".").pop();
+      const fileName = `images/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${ext}`;
+      const fileRef = storageRef(storage, fileName);
+      const uploadTask = uploadBytesResumable(fileRef, file);
+
+      uploadTask.on(
+        "state_changed",
+        null,
+        (error) => {
+          console.error("Upload failed", error);
+          reject(error);
+        },
+        () => {
+          getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
+            resolve(downloadURL);
+          });
+        }
+      );
     });
   }
 
-  function previewImage(event) {
-    selectedImage = event.target.files[0];
-  }
+  // Emoji picker setup
+  emojiPicker = new EmojiButton({
+    position: "top-end",
+    theme: "auto",
+  });
 
+  emojiBtn.addEventListener("click", () => {
+    emojiPicker.togglePicker(emojiBtn);
+  });
+
+  emojiPicker.on("emoji", (emoji) => {
+    const cursorPos = messageInput.selectionStart;
+    const textBefore = messageInput.value.substring(0, cursorPos);
+    const textAfter = messageInput.value.substring(cursorPos);
+    messageInput.value = textBefore + emoji + textAfter;
+    messageInput.focus();
+    messageInput.selectionStart = cursorPos + emoji.length;
+    messageInput.selectionEnd = cursorPos + emoji.length;
+    updateSendButton();
+  });
+
+  // Back button to groups list
   function backToGroups() {
+    chatPage.classList.add("hidden");
     currentGroupId = null;
-    document.getElementById("chatPage").classList.add("hidden");
-    // Show groups sidebar clearly
+    groupTitle.textContent = "Select a group";
+    messages.innerHTML = "";
   }
 
+  // Expose functions globally
   window.createGroup = createGroup;
-  window.sendMessage = sendMessage;
+  window.backToGroups = backToGroups;
+
+</script>
+</body>
+</html>
