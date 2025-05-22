@@ -19,6 +19,9 @@
       getDoc,
       setDoc,
       serverTimestamp,
+      deleteDoc,
+      getDocs,
+      writeBatch,
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import {
       getStorage,
@@ -83,9 +86,29 @@
           const group = doc.data();
           const div = document.createElement("div");
           div.className =
-            "p-3 border rounded cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-600";
-          div.textContent = group.name;
-          div.onclick = () => enterGroup(doc.id, group.name);
+            "p-3 border rounded flex justify-between items-center hover:bg-blue-200 dark:hover:bg-blue-600 cursor-pointer";
+
+          // Group name clickable area
+          const groupNameDiv = document.createElement("div");
+          groupNameDiv.textContent = group.name;
+          groupNameDiv.className = "flex-1";
+          groupNameDiv.onclick = () => enterGroup(doc.id, group.name);
+
+          // Delete button
+          const delBtn = document.createElement("button");
+          delBtn.textContent = "🗑️";
+          delBtn.title = "Delete group";
+          delBtn.className =
+            "ml-4 text-red-600 hover:text-red-800 focus:outline-none";
+          delBtn.onclick = async (e) => {
+            e.stopPropagation(); // Prevent triggering enterGroup
+            if (confirm(`Delete group "${group.name}"? This cannot be undone.`)) {
+              await deleteGroup(doc.id);
+            }
+          };
+
+          div.appendChild(groupNameDiv);
+          div.appendChild(delBtn);
           groupsList().appendChild(div);
         });
       });
@@ -95,12 +118,8 @@
       const groupNameInput = document.getElementById("newGroupName");
       const name = groupNameInput.value.trim();
       if (!name) return alert("Enter a group name");
-      // Check if group with same name exists
+      // Add group without duplicate check for simplicity
       const groupsRef = collection(db, "groups");
-      let exists = false;
-      const snapshot = await query(groupsRef);
-      // Firebase doesn't support direct query like this simply; so just add anyway
-      // To keep it simple, we won't check duplicates now
       await addDoc(groupsRef, {
         name,
         createdAt: serverTimestamp(),
@@ -183,6 +202,31 @@
       showPage(groupsPage());
     }
 
+    async function deleteGroup(groupId) {
+      try {
+        // Delete all messages in the group's messages subcollection
+        const messagesRef = collection(db, "groups", groupId, "messages");
+        const q = query(messagesRef);
+        const snapshot = await getDocs(q);
+        const batch = writeBatch(db);
+
+        snapshot.docs.forEach((doc) => {
+          batch.delete(doc.ref);
+        });
+
+        // Commit batch delete messages
+        await batch.commit();
+
+        // Delete group document
+        await deleteDoc(doc(db, "groups", groupId));
+
+        alert("Group deleted successfully.");
+      } catch (error) {
+        console.error("Error deleting group:", error);
+        alert("Failed to delete group.");
+      }
+    }
+
     window.login = login;
     window.createGroup = createGroup;
     window.enterGroup = enterGroup;
@@ -237,99 +281,4 @@
     />
     <button
       onclick="login()"
-      class="bg-blue-500 text-white px-4 py-2 rounded w-full"
-    >
-      Join Chat
-    </button>
-  </div>
-
-  <!-- Groups List -->
-  <div
-    id="groupsPage"
-    class="hidden w-full max-w-2xl flex flex-col bg-white dark:bg-gray-800 rounded shadow-lg h-[85vh] mt-6 p-4"
-  >
-    <div
-      class="font-bold text-lg mb-2 flex justify-between items-center"
-    >
-      Groups
-      <button
-        onclick="backToGroups()"
-        class="hidden"
-        id="backToGroupsBtn"
-      ></button>
-    </div>
-
-    <div id="groupsList" class="flex-1 overflow-y-auto mb-4"></div>
-
-    <div class="flex gap-2">
-      <input
-        id="newGroupName"
-        type="text"
-        placeholder="New group name"
-        class="flex-1 border rounded p-2 text-black"
-      />
-      <button
-        onclick="createGroup()"
-        class="bg-green-600 text-white px-4 rounded"
-      >
-        Create Group
-      </button>
-    </div>
-  </div>
-
-  <!-- Chat Page -->
-  <div
-    id="chatPage"
-    class="hidden w-full max-w-2xl flex flex-col bg-white dark:bg-gray-800 rounded shadow-lg h-[85vh] mt-6"
-  >
-    <div
-      class="p-4 border-b dark:border-gray-700 font-bold text-lg flex justify-between items-center"
-    >
-      <button
-        onclick="backToGroups()"
-        class="bg-gray-300 dark:bg-gray-700 px-2 py-1 rounded mr-4"
-      >
-        ← Groups
-      </button>
-      <div id="groupTitle" class="flex-1"></div>
-      <span id="currentUserLabel" class="text-xs italic"></span>
-    </div>
-
-    <div
-      id="messages"
-      class="flex-1 overflow-y-auto p-4 flex flex-col space-y-2"
-    ></div>
-
-    <div
-      class="p-3 flex items-center gap-2 border-t dark:border-gray-700"
-    >
-      <button id="emojiBtn" class="text-2xl">😊</button>
-      <input
-        id="messageInput"
-        type="text"
-        placeholder="Type a message"
-        class="flex-1 p-2 border rounded text-sm text-black"
-      />
-      <input
-        type="file"
-        id="imageInput"
-        accept="image/*"
-        onchange="previewImage(event)"
-        class="hidden"
-      />
-      <button
-        onclick="document.getElementById('imageInput').click()"
-        class="bg-gray-300 dark:bg-gray-700 px-2 py-1 rounded text-sm"
-      >
-        📷
-      </button>
-      <button
-        onclick="sendMessage()"
-        class="bg-blue-600 text-white px-4 py-1 rounded"
-      >
-        Send
-      </button>
-    </div>
-  </div>
-</body>
-</html>
+     
