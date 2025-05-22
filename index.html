@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+<!-- LOGIN SCREEN -->
 <div id="login">
   <div class="login-box">
     <h2>Join Chat</h2>
@@ -17,16 +18,22 @@
   </div>
 </div>
 
-
-  <div id="chat" class="hidden">
-    <div id="chat-header"><img id="pfp-display"><span id="user-display"></span></div>
-    <div id="messages"></div>
-    <div id="typing"></div>
-    <form id="form">
-      <input id="input" autocomplete="off" placeholder="Type a message..." />
-      <button>Send</button>
-    </form>
+<!-- CHAT SCREEN -->
+<div id="chat" class="hidden">
+  <div id="chat-header">
+    <img id="pfp-display" src="" />
+    <span id="user-display"></span>
   </div>
+  <!-- messages container -->
+  <ul id="messages"></ul>
+
+  <!-- message form -->
+  <form id="form">
+    <input id="input" autocomplete="off" placeholder="Type a message..." />
+    <button>Send</button>
+  </form>
+</div>
+
 
   <audio id="msg-sound" src="sound.mp3" preload="auto"></audio>
 
