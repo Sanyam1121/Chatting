@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Firebase Group Chat</title>
+  <title>Firebase Phone Login Group Chat</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.min.js"></script>
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
@@ -15,9 +16,6 @@
       onSnapshot,
       query,
       orderBy,
-      doc,
-      getDoc,
-      setDoc,
       serverTimestamp,
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import {
@@ -26,6 +24,11 @@
       uploadBytes,
       getDownloadURL,
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+    import {
+      getAuth,
+      RecaptchaVerifier,
+      signInWithPhoneNumber,
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
@@ -40,34 +43,83 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const storage = getStorage(app);
+    const auth = getAuth(app);
 
-    let username = "";
     let selectedImage = null;
     let currentGroupId = null;
+    let confirmationResult = null;
 
-    // UI elements
-    const loginPage = () => document.getElementById("loginPage");
+    // UI elements shortcuts
+    const loginPhonePage = () => document.getElementById("loginPhonePage");
+    const loginCodePage = () => document.getElementById("loginCodePage");
     const groupsPage = () => document.getElementById("groupsPage");
     const chatPage = () => document.getElementById("chatPage");
     const groupsList = () => document.getElementById("groupsList");
     const messagesList = () => document.getElementById("messages");
     const currentUserLabel = () => document.getElementById("currentUserLabel");
     const groupTitle = () => document.getElementById("groupTitle");
+    const userPhoneLabel = () => document.getElementById("userPhoneLabel");
 
-    function showPage(page) {
-      loginPage().classList.add("hidden");
-      groupsPage().classList.add("hidden");
-      chatPage().classList.add("hidden");
-      page.classList.remove("hidden");
+    function showOnly(...pages) {
+      // Hide all, then show given pages
+      [
+        loginPhonePage(),
+        loginCodePage(),
+        groupsPage(),
+        chatPage(),
+      ].forEach((p) => p.classList.add("hidden"));
+      pages.forEach((p) => p.classList.remove("hidden"));
     }
 
-    function login() {
-      const nameInput = document.getElementById("usernameInput");
-      username = nameInput.value.trim();
-      if (!username) return alert("Enter a username");
-      showPage(groupsPage());
-      loadGroups();
-      currentUserLabel().textContent = `Logged in as: ${username}`;
+    function setupRecaptcha() {
+      window.recaptchaVerifier = new RecaptchaVerifier(
+        "recaptcha-container",
+        {
+          size: "invisible",
+          callback: (response) => {
+            // reCAPTCHA solved, allow signInWithPhoneNumber.
+            //console.log("reCAPTCHA solved");
+          },
+          "expired-callback": () => {
+            alert("reCAPTCHA expired, please try again.");
+          },
+        },
+        auth
+      );
+      window.recaptchaVerifier.render();
+    }
+
+    async function sendVerificationCode() {
+      const phoneInput = document.getElementById("phoneInput");
+      const phoneNumber = phoneInput.value.trim();
+      if (!phoneNumber) return alert("Enter phone number with country code, e.g. +1234567890");
+      try {
+        setupRecaptcha();
+        confirmationResult = await signInWithPhoneNumber(
+          auth,
+          phoneNumber,
+          window.recaptchaVerifier
+        );
+        showOnly(loginCodePage());
+      } catch (error) {
+        alert("Error sending SMS: " + error.message);
+      }
+    }
+
+    async function verifyCode() {
+      const codeInput = document.getElementById("codeInput");
+      const code = codeInput.value.trim();
+      if (!code) return alert("Enter verification code");
+      try {
+        const result = await confirmationResult.confirm(code);
+        // User signed in successfully.
+        const user = result.user;
+        userPhoneLabel().textContent = `Logged in as: ${user.phoneNumber}`;
+        showOnly(groupsPage());
+        loadGroups();
+      } catch (error) {
+        alert("Incorrect code or expired. Try again.");
+      }
     }
 
     async function loadGroups() {
@@ -95,13 +147,7 @@
       const groupNameInput = document.getElementById("newGroupName");
       const name = groupNameInput.value.trim();
       if (!name) return alert("Enter a group name");
-      // Check if group with same name exists
-      const groupsRef = collection(db, "groups");
-      let exists = false;
-      const snapshot = await query(groupsRef);
-      // Firebase doesn't support direct query like this simply; so just add anyway
-      // To keep it simple, we won't check duplicates now
-      await addDoc(groupsRef, {
+      await addDoc(collection(db, "groups"), {
         name,
         createdAt: serverTimestamp(),
       });
@@ -111,7 +157,7 @@
     async function enterGroup(groupId, groupName) {
       currentGroupId = groupId;
       groupTitle().textContent = groupName;
-      showPage(chatPage());
+      showOnly(chatPage());
       listenToMessages(groupId);
     }
 
@@ -132,7 +178,7 @@
       }
 
       await addDoc(collection(db, "groups", currentGroupId, "messages"), {
-        username,
+        username: auth.currentUser.phoneNumber,
         text: text || null,
         imageUrl: imageUrl || null,
         timestamp: new Date(),
@@ -152,7 +198,7 @@
           const div = document.createElement("div");
           div.className =
             "p-2 rounded-lg max-w-[70%] mb-2 " +
-            (msg.username === username
+            (msg.username === auth.currentUser.phoneNumber
               ? "bg-blue-500 text-white self-end"
               : "bg-gray-200 text-black self-start dark:bg-gray-700 dark:text-white");
           div.innerHTML = `
@@ -180,10 +226,11 @@
 
     function backToGroups() {
       currentGroupId = null;
-      showPage(groupsPage());
+      showOnly(groupsPage());
     }
 
-    window.login = login;
+    window.sendVerificationCode = sendVerificationCode;
+    window.verifyCode = verifyCode;
     window.createGroup = createGroup;
     window.enterGroup = enterGroup;
     window.sendMessage = sendMessage;
@@ -192,6 +239,7 @@
     window.backToGroups = backToGroups;
 
     window.onload = () => {
+      showOnly(loginPhonePage());
       const picker = new EmojiButton();
       const trigger = document.querySelector("#emojiBtn");
       picker.on("emoji", (emoji) => {
@@ -223,113 +271,42 @@
     Toggle Dark Mode
   </button>
 
-  <!-- Login -->
+  <!-- Phone Number Login Page -->
   <div
-    id="loginPage"
+    id="loginPhonePage"
     class="w-full max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow p-6"
   >
-    <h1 class="text-xl font-bold mb-4">Enter Username</h1>
+    <h1 class="text-xl font-bold mb-4">Sign in with Phone</h1>
     <input
-      id="usernameInput"
-      type="text"
-      placeholder="Your username"
+      id="phoneInput"
+      type="tel"
+      placeholder="Phone number e.g. +1234567890"
       class="w-full border rounded p-2 mb-4 text-black"
     />
+    <div id="recaptcha-container"></div>
     <button
-      onclick="login()"
+      onclick="sendVerificationCode()"
       class="bg-blue-500 text-white px-4 py-2 rounded w-full"
     >
-      Join Chat
+      Send Verification Code
     </button>
   </div>
 
-  <!-- Groups List -->
+  <!-- Verification Code Page -->
   <div
-    id="groupsPage"
-    class="hidden w-full max-w-2xl flex flex-col bg-white dark:bg-gray-800 rounded shadow-lg h-[85vh] mt-6 p-4"
+    id="loginCodePage"
+    class="hidden w-full max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow p-6"
   >
-    <div
-      class="font-bold text-lg mb-2 flex justify-between items-center"
+    <h1 class="text-xl font-bold mb-4">Enter Verification Code</h1>
+    <input
+      id="codeInput"
+      type="text"
+      placeholder="SMS code"
+      class="w-full border rounded p-2 mb-4 text-black"
+    />
+    <button
+      onclick="verifyCode()"
+      class="bg-green-600 text-white px-4 py-2 rounded w-full"
     >
-      Groups
-      <button
-        onclick="backToGroups()"
-        class="hidden"
-        id="backToGroupsBtn"
-      ></button>
-    </div>
-
-    <div id="groupsList" class="flex-1 overflow-y-auto mb-4"></div>
-
-    <div class="flex gap-2">
-      <input
-        id="newGroupName"
-        type="text"
-        placeholder="New group name"
-        class="flex-1 border rounded p-2 text-black"
-      />
-      <button
-        onclick="createGroup()"
-        class="bg-green-600 text-white px-4 rounded"
-      >
-        Create Group
-      </button>
-    </div>
-  </div>
-
-  <!-- Chat Page -->
-  <div
-    id="chatPage"
-    class="hidden w-full max-w-2xl flex flex-col bg-white dark:bg-gray-800 rounded shadow-lg h-[85vh] mt-6"
-  >
-    <div
-      class="p-4 border-b dark:border-gray-700 font-bold text-lg flex justify-between items-center"
-    >
-      <button
-        onclick="backToGroups()"
-        class="bg-gray-300 dark:bg-gray-700 px-2 py-1 rounded mr-4"
-      >
-        ← Groups
-      </button>
-      <div id="groupTitle" class="flex-1"></div>
-      <span id="currentUserLabel" class="text-xs italic"></span>
-    </div>
-
-    <div
-      id="messages"
-      class="flex-1 overflow-y-auto p-4 flex flex-col space-y-2"
-    ></div>
-
-    <div
-      class="p-3 flex items-center gap-2 border-t dark:border-gray-700"
-    >
-      <button id="emojiBtn" class="text-2xl">😊</button>
-      <input
-        id="messageInput"
-        type="text"
-        placeholder="Type a message"
-        class="flex-1 p-2 border rounded text-sm text-black"
-      />
-      <input
-        type="file"
-        id="imageInput"
-        accept="image/*"
-        onchange="previewImage(event)"
-        class="hidden"
-      />
-      <button
-        onclick="document.getElementById('imageInput').click()"
-        class="bg-gray-300 dark:bg-gray-700 px-2 py-1 rounded text-sm"
-      >
-        📷
-      </button>
-      <button
-        onclick="sendMessage()"
-        class="bg-blue-600 text-white px-4 py-1 rounded"
-      >
-        Send
-      </button>
-    </div>
-  </div>
-</body>
-</html>
+      Verify Code
+    </button>
