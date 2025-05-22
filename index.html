@@ -110,441 +110,218 @@
   </div>
 
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getFirestore,
-      collection,
-      addDoc,
-      onSnapshot,
-      query,
-      orderBy,
-      doc,
-      getDocs,
-      deleteDoc,
-      updateDoc,
-      serverTimestamp,
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import {
-      getStorage,
-      ref,
-      uploadBytes,
-      getDownloadURL,
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getFirestore,
+    collection,
+    addDoc,
+    onSnapshot,
+    query,
+    orderBy,
+    doc,
+    getDocs,
+    deleteDoc,
+    serverTimestamp,
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import {
+    getStorage,
+    ref,
+    uploadBytes,
+    getDownloadURL,
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
-    // Firebase config
-   // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
-  authDomain: "chatting-fd641.firebaseapp.com",
-  projectId: "chatting-fd641",
-  storageBucket: "chatting-fd641.firebasestorage.app",
-  messagingSenderId: "535384451291",
-  appId: "1:535384451291:web:828f60686d81be018b44fe",
-  measurementId: "G-RKS4CFZPJ4"
-};
+  const firebaseConfig = {
+    apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
+    authDomain: "chatting-fd641.firebaseapp.com",
+    projectId: "chatting-fd641",
+    storageBucket: "chatting-fd641.appspot.com",
+    messagingSenderId: "535384451291",
+    appId: "1:535384451291:web:828f60686d81be018b44fe",
+    measurementId: "G-RKS4CFZPJ4",
+  };
 
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const storage = getStorage(app);
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const storage = getStorage(app);
 
-    // User and chat state
-    let currentUser = null;
-    let selectedImage = null;
-    let currentGroupId = null;
-    let messagesListener = null;
-    let typingTimeout = null;
-    let mediaRecorder = null;
-    let recordedChunks = [];
+  let currentUser = null;
+  let selectedImage = null;
+  let currentGroupId = null;
 
-    // Elements
-    const loginSection = document.getElementById("login-section");
-    const chatUI = document.getElementById("chat-ui");
-    const groupsList = document.getElementById("groupsList");
-    const currentUserLabel = document.getElementById("currentUserLabel");
-    const groupTitle = document.getElementById("groupTitle");
-    const messagesList = document.getElementById("messages");
-    const typingIndicator = document.getElementById("typingIndicator");
-    const messageInput = document.getElementById("messageInput");
-    const emojiBtn = document.getElementById("emojiBtn");
-    const darkModeToggle = document.getElementById("darkModeToggle");
-    const recordBtn = document.getElementById("recordBtn");
+  const loginSection = document.getElementById("login-section");
+  const chatUI = document.getElementById("chat-ui");
+  const usernameInput = document.getElementById("username-input");
+  const loginBtn = document.getElementById("login-btn");
 
-    // Emoji picker setup
-    const picker = new EmojiButton({
-      position: 'top-start',
-      theme: 'auto',
-      autoHide: true,
-    });
-    emojiBtn.addEventListener("click", () => picker.togglePicker(emojiBtn));
-    picker.on("emoji", emoji => {
-      messageInput.value += emoji;
-      messageInput.focus();
-      updateTypingStatus(true);
-    });
+  const groupsList = document.getElementById("groupsList");
+  const messagesList = document.getElementById("messages");
+  const currentUserLabel = document.getElementById("currentUserLabel");
+  const groupTitle = document.getElementById("groupTitle");
 
-    // Dark mode sync and toggle
-    function initDarkMode() {
-      const saved = localStorage.getItem("darkMode");
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      if (saved === "true" || (saved === null && prefersDark)) {
-        document.documentElement.classList.add("dark");
-        darkModeToggle.checked = true;
-      }
-      darkModeToggle.addEventListener("change", () => {
-        if (darkModeToggle.checked) {
-          document.documentElement.classList.add("dark");
-          localStorage.setItem("darkMode", "true");
-        } else {
-          document.documentElement.classList.remove("dark");
-          localStorage.setItem("darkMode", "false");
-        }
-      });
+  loginBtn.addEventListener("click", () => {
+    const name = usernameInput.value.trim();
+    if (!name) {
+      alert("Please enter your name");
+      return;
     }
-    initDarkMode();
+    currentUser = {
+      uid: "user-" + Math.random().toString(36).substring(2, 10),
+      displayName: name,
+    };
+    loginSection.style.display = "none";
+    chatUI.style.display = "flex";
+    currentUserLabel.textContent = `Logged in as: ${currentUser.displayName}`;
+    loadGroups();
+  });
 
-    // Login function
-    document.getElementById("login-btn").addEventListener("click", () => {
-      const name = document.getElementById("username-input").value.trim();
-      if (!name) {
-        alert("Please enter your name");
-        return;
-      }
-      // Create simple user object
-      currentUser = {
-        uid: `user_${Date.now()}`,
-        displayName: name,
-      };
-      currentUserLabel.textContent = `You: ${name}`;
-      loginSection.classList.add("hidden");
-      chatUI.classList.remove("hidden");
-      loadGroups();
-    });
-
-    // Load groups from firestore
-    async function loadGroups() {
+  async function loadGroups() {
+    groupsList.innerHTML = "Loading groups...";
+    const groupsRef = collection(db, "groups");
+    onSnapshot(groupsRef, (snapshot) => {
       groupsList.innerHTML = "";
-      const groupsSnap = await getDocs(collection(db, "groups"));
-      groupsSnap.forEach(docSnap => {
+      if (snapshot.empty) {
+        groupsList.innerHTML = "<p class='text-gray-500'>No groups yet. Create one!</p>";
+        return;
+      }
+      snapshot.forEach((docSnap) => {
         const group = docSnap.data();
-        const groupId = docSnap.id;
-        const div = document.createElement("div");
-        div.textContent = group.name;
-        div.className = "cursor-pointer p-3 rounded-lg hover:bg-green-100 dark:hover:bg-green-900 transition";
-        div.onclick = () => openGroup(groupId, group.name);
-        groupsList.appendChild(div);
-      });
-    }
+        const container = document.createElement("div");
+        container.className =
+          "p-3 border rounded mb-2 flex justify-between items-center hover:bg-blue-100 dark:hover:bg-gray-700";
 
-    // Create new group
-    async function createGroup() {
-      const nameInput = document.getElementById("newGroupName");
-      const name = nameInput.value.trim();
-      if (!name) return alert("Group name cannot be empty");
-      await addDoc(collection(db, "groups"), { name });
-      nameInput.value = "";
-      loadGroups();
-    }
+        const nameDiv = document.createElement("div");
+        nameDiv.textContent = group.name;
+        nameDiv.className = "cursor-pointer flex-1";
+        nameDiv.onclick = () => enterGroup(docSnap.id, group.name);
 
-    // Open a group chat
-    async function openGroup(groupId, groupName) {
-      currentGroupId = groupId;
-      groupTitle.textContent = groupName;
-      document.getElementById("groupsPage").classList.add("hidden");
-      document.getElementById("chatPage").classList.remove("hidden");
-      messagesList.innerHTML = "";
-
-      // Unsubscribe previous listener if any
-      if (messagesListener) messagesListener();
-
-      // Listen to messages
-      const messagesRef = collection(db, "groups", groupId, "messages");
-      const q = query(messagesRef, orderBy("createdAt", "asc"));
-
-      messagesListener = onSnapshot(q, async (snapshot) => {
-        messagesList.innerHTML = "";
-        let lastMessageIds = [];
-        snapshot.forEach(docSnap => {
-          const msg = docSnap.data();
-          const id = docSnap.id;
-          lastMessageIds.push(id);
-
-          const isSentByCurrentUser = msg.uid === currentUser.uid;
-          const isEdited = msg.editedAt ? true : false;
-          const isReadByUser = msg.readBy?.includes(currentUser.uid) ?? false;
-
-          const div = document.createElement("div");
-          div.className = `max-w-[70%] px-4 py-2 rounded-lg shadow-sm break-words flex flex-col
-            ${isSentByCurrentUser ? "bg-blue-600 text-white self-end rounded-tr-none" : "bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-gray-100 self-start rounded-tl-none"}`;
-
-          let contentHTML = 
-            `<div class="text-xs opacity-70 font-semibold">${msg.username}</div>` +
-            (msg.text ? `<div>${escapeHTML(msg.text)}</div>` : "") +
-            (msg.imageUrl ? `<img src="${msg.imageUrl}" class="mt-2 rounded shadow max-w-xs" />` : "") +
-            (msg.audioUrl ? `<audio controls class="mt-2 rounded w-48" src="${msg.audioUrl}"></audio>` : "") +
-            (isEdited ? `<div class="text-[10px] italic opacity-60 mt-1">edited</div>` : "");
-
-          div.innerHTML = contentHTML;
-
-          // Edit & Delete Buttons for current user's messages
-          if (isSentByCurrentUser) {
-            const actionsDiv = document.createElement("div");
-            actionsDiv.className = "flex gap-2 mt-1 self-end";
-
-            // Edit button
-            const editBtn = document.createElement("button");
-            editBtn.textContent = "✏️";
-            editBtn.title = "Edit message";
-            editBtn.className = "text-xs hover:underline";
-            editBtn.onclick = () => startEditingMessage(docSnap.id, msg.text);
-            actionsDiv.appendChild(editBtn);
-
-            // Delete button
-            const delBtn = document.createElement("button");
-            delBtn.textContent = "🗑️";
-            delBtn.title = "Delete message";
-            delBtn.className = "text-xs hover:underline";
-            delBtn.onclick = () => deleteMessage(docSnap.id);
-            actionsDiv.appendChild(delBtn);
-
-            div.appendChild(actionsDiv);
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "❌";
+        deleteBtn.className = "ml-2 text-red-600 hover:text-red-800 text-sm";
+        deleteBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (confirm(`Delete group "${group.name}"?`)) {
+            deleteGroup(docSnap.id);
           }
-
-          // Read receipt checkmark for sent messages
-          if (isSentByCurrentUser) {
-            const readReceipt = document.createElement("div");
-            readReceipt.className = "text-xs self-end opacity-70 mt-1 flex items-center gap-1";
-            const allRead = msg.readBy?.length >= 1 && msg.readBy.includes(currentUser.uid); // Simplified
-            readReceipt.innerHTML = allRead 
-              ? `<span title="Read">&#10003;&#10003;</span>` 
-              : `<span title="Sent">&#10003;</span>`;
-            div.appendChild(readReceipt);
-          }
-
-          messagesList.appendChild(div);
-        });
-
-        // Scroll to bottom
-        messagesList.scrollTop = messagesList.scrollHeight;
-      });
-
-      // Update typing indicator listener
-      listenToTyping(groupId);
-    }
-
-    // Escape HTML to prevent injection
-    function escapeHTML(str) {
-      if (!str) return "";
-      return str.replace(/[&<>"']/g, function (match) {
-        const escape = {
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;"
         };
-        return escape[match];
+
+        container.appendChild(nameDiv);
+        container.appendChild(deleteBtn);
+        groupsList.appendChild(container);
       });
+    });
+  }
+
+  async function deleteGroup(groupId) {
+    try {
+      const messagesRef = collection(db, "groups", groupId, "messages");
+      const messagesSnap = await getDocs(messagesRef);
+      const deletePromises = messagesSnap.docs.map((doc) => deleteDoc(doc.ref));
+      await Promise.all(deletePromises);
+      await deleteDoc(doc(db, "groups", groupId));
+      alert("Group deleted successfully.");
+    } catch (error) {
+      console.error("Error deleting group:", error);
+      alert("Failed to delete group.");
+    }
+  }
+
+  async function createGroup() {
+    const groupNameInput = document.getElementById("newGroupName");
+    const name = groupNameInput.value.trim();
+    if (!name) return alert("Enter a group name");
+    await addDoc(collection(db, "groups"), {
+      name,
+      createdAt: serverTimestamp(),
+    });
+    groupNameInput.value = "";
+  }
+
+  async function enterGroup(groupId, groupName) {
+    currentGroupId = groupId;
+    groupTitle.textContent = groupName;
+    showChatUI();
+    listenToMessages(groupId);
+  }
+
+  function showChatUI() {
+    document.getElementById("groupsPage").classList.add("hidden");
+    document.getElementById("chatPage").classList.remove("hidden");
+  }
+
+  async function sendMessage() {
+    if (!currentGroupId) return alert("No group selected");
+    const text = document.getElementById("messageInput").value.trim();
+    if (!text && !selectedImage) return;
+    let imageUrl = null;
+
+    if (selectedImage) {
+      const storageRef = ref(storage, "images/" + Date.now() + "-" + selectedImage.name);
+      await uploadBytes(storageRef, selectedImage);
+      imageUrl = await getDownloadURL(storageRef);
+      selectedImage = null;
     }
 
-    // Back to group list
-    function backToGroups() {
-      currentGroupId = null;
-      if (messagesListener) messagesListener();
+    await addDoc(collection(db, "groups", currentGroupId, "messages"), {
+      uid: currentUser.uid,
+      username: currentUser.displayName,
+      text: text || null,
+      imageUrl: imageUrl || null,
+      timestamp: new Date(),
+    });
+
+    document.getElementById("messageInput").value = "";
+    document.getElementById("imageInput").value = "";
+  }
+
+  function listenToMessages(groupId) {
+    const messagesRef = collection(db, "groups", groupId, "messages");
+    const q = query(messagesRef, orderBy("timestamp", "asc"));
+    onSnapshot(q, (snapshot) => {
       messagesList.innerHTML = "";
-      groupTitle.textContent = "";
-      typingIndicator.textContent = "";
-      document.getElementById("chatPage").classList.add("hidden");
-      document.getElementById("groupsPage").classList.remove("hidden");
-    }
+      snapshot.forEach((doc) => {
+        const msg = doc.data();
+        const div = document.createElement("div");
+        div.className =
+          "p-2 rounded-lg max-w-[70%] mb-2 flex flex-col " +
+          (msg.uid === currentUser.uid
+            ? "bg-blue-500 text-white self-end"
+            : "bg-gray-200 text-black self-start dark:bg-gray-700 dark:text-white");
 
-    // Send a message (text, image, audio)
-    async function sendMessage() {
-      if (!currentGroupId) {
-        alert("Please select a group first.");
-        return;
-      }
-      const text = messageInput.value.trim();
-      if (!text && !selectedImage && !recordedChunks.length) return;
+        div.innerHTML =
+          `<div class="text-xs mb-1 opacity-70">${msg.username}</div>` +
+          (msg.text ? `<div>${msg.text}</div>` : "") +
+          (msg.imageUrl ? `<img src="${msg.imageUrl}" class="mt-2 rounded shadow max-w-[200px]"/>` : "");
 
-      let imageUrl = null;
-      if (selectedImage) {
-        const storageRef = ref(storage, `images/${Date.now()}_${selectedImage.name}`);
-        await uploadBytes(storageRef, selectedImage);
-        imageUrl = await getDownloadURL(storageRef);
-        selectedImage = null;
-        document.getElementById("imageInput").value = "";
-      }
-
-      let audioUrl = null;
-      if (recordedChunks.length) {
-        const blob = new Blob(recordedChunks, { type: "audio/webm" });
-        recordedChunks = [];
-        const storageRef = ref(storage, `audio/${Date.now()}_voice.webm`);
-        await uploadBytes(storageRef, blob);
-        audioUrl = await getDownloadURL(storageRef);
-        stopRecordingUI();
-      }
-
-      // Add message doc
-      await addDoc(collection(db, "groups", currentGroupId, "messages"), {
-        text,
-        username: currentUser.displayName,
-        uid: currentUser.uid,
-        imageUrl,
-        audioUrl,
-        readBy: [currentUser.uid], // message is read by sender automatically
-        createdAt: serverTimestamp(),
+        messagesList.appendChild(div);
       });
-
-      messageInput.value = "";
-      updateTypingStatus(false);
-    }
-
-    // Image preview
-    function previewImage(event) {
-      selectedImage = event.target.files[0];
-      if (selectedImage) {
-        alert(`Image "${selectedImage.name}" selected! It will be sent with your next message.`);
-      }
-    }
-
-    // Editing message
-    let editingMessageId = null;
-    function startEditingMessage(messageId, oldText) {
-      editingMessageId = messageId;
-      messageInput.value = oldText;
-      messageInput.focus();
-      messageInput.setSelectionRange(oldText.length, oldText.length);
-      // Change send button to save
-      document.querySelector("footer button.bg-blue-600").textContent = "Save";
-      document.querySelector("footer button.bg-blue-600").onclick = saveEditedMessage;
-    }
-    async function saveEditedMessage() {
-      if (!editingMessageId) return;
-      const newText = messageInput.value.trim();
-      if (!newText) return alert("Message cannot be empty");
-      const msgDoc = doc(db, "groups", currentGroupId, "messages", editingMessageId);
-      await updateDoc(msgDoc, {
-        text: newText,
-        editedAt: serverTimestamp(),
-      });
-      editingMessageId = null;
-      messageInput.value = "";
-      // Restore send button
-      const sendBtn = document.querySelector("footer button.bg-blue-600");
-      sendBtn.textContent = "Send";
-      sendBtn.onclick = sendMessage;
-    }
-
-    // Delete message
-    async function deleteMessage(messageId) {
-      if (!confirm("Are you sure you want to delete this message?")) return;
-      const msgDoc = doc(db, "groups", currentGroupId, "messages", messageId);
-      await deleteDoc(msgDoc);
-    }
-
-    // Typing indicator logic
-    async function updateTypingStatus(isTyping) {
-      if (!currentGroupId || !currentUser) return;
-      const typingDoc = doc(db, "groups", currentGroupId, "typing", currentUser.uid);
-      if (isTyping) {
-        await updateDoc(typingDoc, { name: currentUser.displayName }).catch(async () => {
-          // If doc doesn't exist, create it
-          await setDoc(typingDoc, { name: currentUser.displayName });
-        });
-      } else {
-        await deleteDoc(typingDoc).catch(() => {});
-      }
-    }
-
-    // Listen to typing indicator
-    function listenToTyping(groupId) {
-      const typingRef = collection(db, "groups", groupId, "typing");
-      onSnapshot(typingRef, snapshot => {
-        const typingUsers = [];
-        snapshot.forEach(doc => {
-          if (doc.id !== currentUser.uid) {
-            typingUsers.push(doc.data().name);
-          }
-        });
-        if (typingUsers.length === 0) {
-          typingIndicator.textContent = "";
-        } else if (typingUsers.length === 1) {
-          typingIndicator.textContent = `${typingUsers[0]} is typing...`;
-        } else {
-          typingIndicator.textContent = `${typingUsers.join(", ")} are typing...`;
-        }
-      });
-    }
-
-    // Voice recording logic
-    let mediaRecorder;
-    let recordedChunks = [];
-    recordBtn.addEventListener("click", () => {
-      if (recordBtn.dataset.recording === "true") {
-        stopRecording();
-      } else {
-        startRecording();
-      }
+      messagesList.scrollTop = messagesList.scrollHeight;
     });
-    async function startRecording() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert("Audio recording is not supported in your browser.");
-        return;
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder = new MediaRecorder(stream);
-      mediaRecorder.ondataavailable = e => {
-        if (e.data.size > 0) recordedChunks.push(e.data);
-      };
-      mediaRecorder.onstop = () => {
-        // Recording stopped, ready to send audio message
-      };
-      mediaRecorder.start();
-      recordBtn.textContent = "Stop Recording";
-      recordBtn.dataset.recording = "true";
-    }
-    function stopRecording() {
-      if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
-        recordBtn.textContent = "Record Voice";
-        recordBtn.dataset.recording = "false";
-      }
-    }
-    function stopRecordingUI() {
-      recordBtn.textContent = "Record Voice";
-      recordBtn.dataset.recording = "false";
-    }
+  }
 
-    // Event listeners for message input typing status
-    messageInput.addEventListener("input", () => {
-      updateTypingStatus(messageInput.value.length > 0);
+  function previewImage(event) {
+    selectedImage = event.target.files[0];
+  }
+
+  function backToGroups() {
+    currentGroupId = null;
+    document.getElementById("chatPage").classList.add("hidden");
+    document.getElementById("groupsPage").classList.remove("hidden");
+  }
+
+  window.createGroup = createGroup;
+  window.sendMessage = sendMessage;
+  window.previewImage = previewImage;
+  window.backToGroups = backToGroups;
+
+  window.onload = () => {
+    const picker = new EmojiButton();
+    const trigger = document.querySelector("#emojiBtn");
+    picker.on("emoji", (emoji) => {
+      document.getElementById("messageInput").value += emoji;
     });
+    trigger.addEventListener("click", () => picker.togglePicker(trigger));
+  };
+</script>
 
-    // Send message on Enter key
-    messageInput.addEventListener("keydown", e => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        if (editingMessageId) {
-          saveEditedMessage();
-        } else {
-          sendMessage();
-        }
-      }
-    });
-
-    // Image input change
-    document.getElementById("imageInput").addEventListener("change", previewImage);
-
-    // Group create button
-    document.getElementById("createGroupBtn").addEventListener("click", createGroup);
-
-    // Back button
-    document.getElementById("backBtn").addEventListener("click", backToGroups);
-
-    // Send button
-    document.querySelector("footer button.bg-blue-600").addEventListener("click", sendMessage);
-  </script>
 </body>
 </html>
