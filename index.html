@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" >
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Firebase Group Chat</title>
+  <title>Advanced Firebase Group Chat</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.min.js"></script>
   <script type="module">
@@ -18,17 +18,22 @@
       doc,
       getDoc,
       setDoc,
+      updateDoc,
       serverTimestamp,
       deleteDoc,
-      getDocs
+      getDocs,
+      where,
+      limit
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import {
       getStorage,
       ref,
       uploadBytes,
       getDownloadURL,
+      deleteObject,
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
+    // --- Firebase config and init ---
     const firebaseConfig = {
       apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
       authDomain: "chatting-fd641.firebaseapp.com",
@@ -43,10 +48,18 @@
     const db = getFirestore(app);
     const storage = getStorage(app);
 
+    // --- Globals ---
     let username = "";
-    let selectedImage = null;
+    let avatarUrl = "";
+    let selectedImages = []; // support multiple images
     let currentGroupId = null;
+    let userDocId = null;
+    let editingMessageId = null; // message being edited
+    let typingTimeout = null;
+    let isTyping = false;
+    let emojiPicker;
 
+    // DOM getters
     const loginPage = () => document.getElementById("loginPage");
     const groupsPage = () => document.getElementById("groupsPage");
     const chatPage = () => document.getElementById("chatPage");
@@ -54,7 +67,12 @@
     const messagesList = () => document.getElementById("messages");
     const currentUserLabel = () => document.getElementById("currentUserLabel");
     const groupTitle = () => document.getElementById("groupTitle");
+    const typingLabel = () => document.getElementById("typingLabel");
+    const pinnedMsgDiv = () => document.getElementById("pinnedMessage");
+    const searchInput = () => document.getElementById("searchInput");
+    const avatarInput = () => document.getElementById("avatarInput");
 
+    // Show/hide pages
     function showPage(page) {
       loginPage().classList.add("hidden");
       groupsPage().classList.add("hidden");
@@ -62,15 +80,75 @@
       page.classList.remove("hidden");
     }
 
-    function login() {
+    // Utility to upload avatar or images
+    async function uploadFile(file, folder = "images") {
+      const storageRef = ref(storage, folder + "/" + Date.now() + "-" + file.name);
+      await uploadBytes(storageRef, file);
+      return getDownloadURL(storageRef);
+    }
+
+    // Login user, create/update user doc in Firestore for presence and avatar
+    async function login() {
       const nameInput = document.getElementById("usernameInput");
       username = nameInput.value.trim();
       if (!username) return alert("Enter a username");
+
+      // Upload avatar if chosen
+      if (avatarInput().files.length) {
+        avatarUrl = await uploadFile(avatarInput().files[0], "avatars");
+      } else {
+        avatarUrl = ""; // no avatar chosen
+      }
+
+      // Create or update user document for presence and avatar
+      const usersRef = collection(db, "users");
+      // Check if username already exists
+      const q = query(usersRef, where("username", "==", username), limit(1));
+      const querySnap = await getDocs(q);
+      if (!querySnap.empty) {
+        userDocId = querySnap.docs[0].id;
+        await updateDoc(doc(db, "users", userDocId), {
+          avatarUrl,
+          online: true,
+          lastActive: serverTimestamp(),
+        });
+      } else {
+        const userDoc = await addDoc(usersRef, {
+          username,
+          avatarUrl,
+          online: true,
+          lastActive: serverTimestamp(),
+        });
+        userDocId = userDoc.id;
+      }
+
+      currentUserLabel().textContent = `Logged in as: ${username}`;
       showPage(groupsPage());
       loadGroups();
-      currentUserLabel().textContent = `Logged in as: ${username}`;
+      setupPresence();
     }
 
+    // Setup presence tracking (online/offline)
+    function setupPresence() {
+      window.addEventListener("beforeunload", async () => {
+        if (userDocId) {
+          await updateDoc(doc(db, "users", userDocId), {
+            online: false,
+            lastActive: serverTimestamp(),
+          });
+        }
+      });
+      // Periodically update lastActive to keep presence fresh
+      setInterval(async () => {
+        if (userDocId) {
+          await updateDoc(doc(db, "users", userDocId), {
+            lastActive: serverTimestamp(),
+          });
+        }
+      }, 30000);
+    }
+
+    // Load groups from Firestore
     async function loadGroups() {
       groupsList().innerHTML = "Loading groups...";
       const groupsRef = collection(db, "groups");
@@ -87,8 +165,18 @@
 
           const nameDiv = document.createElement("div");
           nameDiv.textContent = group.name;
-          nameDiv.className = "cursor-pointer flex-1";
+          nameDiv.className = "cursor-pointer flex-1 font-semibold";
           nameDiv.onclick = () => enterGroup(docSnap.id, group.name);
+
+          // Show member count
+          const memberCountSpan = document.createElement("span");
+          memberCountSpan.className = "ml-2 text-xs text-gray-600 dark:text-gray-400";
+          memberCountSpan.textContent = group.memberCount ? `(${group.memberCount} members)` : "";
+
+          // Pin message snippet preview
+          const pinSnippet = document.createElement("div");
+          pinSnippet.className = "text-xs italic text-gray-500 dark:text-gray-400 truncate max-w-xs";
+          pinSnippet.textContent = group.pinnedMessage?.text ? `📌 ${group.pinnedMessage.text.substring(0, 40)}` : "";
 
           const deleteBtn = document.createElement("button");
           deleteBtn.textContent = "❌";
@@ -101,17 +189,32 @@
           };
 
           container.appendChild(nameDiv);
+          container.appendChild(memberCountSpan);
+          container.appendChild(pinSnippet);
           container.appendChild(deleteBtn);
           groupsList().appendChild(container);
         });
       });
     }
 
+    // Delete group and all messages
     async function deleteGroup(groupId) {
       try {
         const messagesRef = collection(db, "groups", groupId, "messages");
         const messagesSnap = await getDocs(messagesRef);
-        const deletePromises = messagesSnap.docs.map((doc) => deleteDoc(doc.ref));
+        const deletePromises = messagesSnap.docs.map(async (msgDoc) => {
+          // Delete image from storage if exists
+          const msg = msgDoc.data();
+          if (msg.imageUrls?.length) {
+            for (const url of msg.imageUrls) {
+              try {
+                const fileRef = ref(storage, url.split('?')[0].split('/').slice(-1)[0]);
+                await deleteObject(fileRef);
+              } catch {}
+            }
+          }
+          await deleteDoc(msgDoc.ref);
+        });
         await Promise.all(deletePromises);
         await deleteDoc(doc(db, "groups", groupId));
         alert("Group deleted successfully.");
@@ -121,158 +224,76 @@
       }
     }
 
+    // Create new group
     async function createGroup() {
       const groupNameInput = document.getElementById("newGroupName");
       const name = groupNameInput.value.trim();
       if (!name) return alert("Enter a group name");
+
+      // Initialize group with memberCount=1 and pinnedMessage null
       await addDoc(collection(db, "groups"), {
         name,
         createdAt: serverTimestamp(),
+        memberCount: 1,
+        pinnedMessage: null,
+        admins: [username], // creator is admin
       });
       groupNameInput.value = "";
     }
 
+    // Enter a group and start listening for messages
     async function enterGroup(groupId, groupName) {
       currentGroupId = groupId;
       groupTitle().textContent = groupName;
+      editingMessageId = null;
       showPage(chatPage());
+      loadPinnedMessage(groupId);
       listenToMessages(groupId);
+      listenToTyping(groupId);
+      loadOnlineUsers(groupId);
+      // Update memberCount (optimistic)
+      const groupDocRef = doc(db, "groups", groupId);
+      const groupSnap = await getDoc(groupDocRef);
+      if (groupSnap.exists()) {
+        const data = groupSnap.data();
+        // add user as admin if none exists (failsafe)
+        if (!data.admins || !data.admins.length) {
+          await updateDoc(groupDocRef, { admins: [username] });
+        }
+      }
     }
 
+    // Send message (new or edited)
     async function sendMessage() {
       if (!currentGroupId) return alert("No group selected");
-      const text = document.getElementById("messageInput").value.trim();
-      if (!text && !selectedImage) return;
-      let imageUrl = null;
+      const input = document.getElementById("messageInput");
+      const text = input.value.trim();
+      if (!text && selectedImages.length === 0) return;
 
-      if (selectedImage) {
-        const storageRef = ref(storage, "images/" + Date.now() + "-" + selectedImage.name);
-        await uploadBytes(storageRef, selectedImage);
-        imageUrl = await getDownloadURL(storageRef);
-        selectedImage = null;
+      // If editing a message
+      if (editingMessageId) {
+        const msgDocRef = doc(db, "groups", currentGroupId, "messages", editingMessageId);
+        await updateDoc(msgDocRef, {
+          text,
+          edited: true,
+          editedAt: serverTimestamp(),
+        });
+        editingMessageId = null;
+        input.value = "";
+        selectedImages = [];
+        return;
       }
 
-      await addDoc(collection(db, "groups", currentGroupId, "messages"), {
-        username,
-        text: text || null,
-        imageUrl: imageUrl || null,
-        timestamp: new Date(),
-      });
+      // Upload images if any
+      let imageUrls = [];
+      if (selectedImages.length > 0) {
+        for (const img of selectedImages) {
+          const url = await uploadFile(img);
+          imageUrls.push(url);
+        }
+        selectedImages = [];
+        document.getElementById("imageInput").value = "";
+      }
 
-      document.getElementById("messageInput").value = "";
-      document.getElementById("imageInput").value = "";
-    }
-
-    function listenToMessages(groupId) {
-      const messagesRef = collection(db, "groups", groupId, "messages");
-      const q = query(messagesRef, orderBy("timestamp", "asc"));
-      onSnapshot(q, (snapshot) => {
-        messagesList().innerHTML = "";
-        snapshot.forEach((doc) => {
-          const msg = doc.data();
-          const div = document.createElement("div");
-          div.className =
-            "p-2 rounded-lg max-w-[70%] mb-2 " +
-            (msg.username === username
-              ? "bg-blue-500 text-white self-end"
-              : "bg-gray-200 text-black self-start dark:bg-gray-700 dark:text-white");
-          div.innerHTML =
-            `<div class="text-xs mb-1 opacity-70">${msg.username}</div>` +
-            (msg.text ? `<div>${msg.text}</div>` : "") +
-            (msg.imageUrl ? `<img src="${msg.imageUrl}" class="mt-2 rounded shadow max-w-[200px]"/>` : "");
-          messagesList().appendChild(div);
-        });
-        messagesList().scrollTop = messagesList().scrollHeight;
-      });
-    }
-
-    function previewImage(event) {
-      selectedImage = event.target.files[0];
-    }
-
-    function toggleDarkMode() {
-      document.body.classList.toggle("dark");
-    }
-
-    function backToGroups() {
-      currentGroupId = null;
-      showPage(groupsPage());
-    }
-
-    window.login = login;
-    window.createGroup = createGroup;
-    window.enterGroup = enterGroup;
-    window.sendMessage = sendMessage;
-    window.previewImage = previewImage;
-    window.toggleDarkMode = toggleDarkMode;
-    window.backToGroups = backToGroups;
-
-    window.onload = () => {
-      const picker = new EmojiButton();
-      const trigger = document.querySelector("#emojiBtn");
-      picker.on("emoji", (emoji) => {
-        document.getElementById("messageInput").value += emoji;
-      });
-      trigger.addEventListener("click", () => picker.togglePicker(trigger));
-    };
-  </script>
-
-  <style>
-    body.dark {
-      background-color: #1a202c;
-      color: white;
-    }
-    .dark input,
-    .dark textarea {
-      color: black;
-    }
-  </style>
-</head>
-
-<body class="min-h-screen bg-gray-100 dark:bg-gray-900 text-black dark:text-white flex flex-col items-center p-4">
-  <button onclick="toggleDarkMode()" class="absolute top-4 right-4 px-3 py-1 bg-gray-700 text-white rounded text-sm">
-    Toggle Dark Mode
-  </button>
-
-  <!-- Login -->
-  <div id="loginPage" class="w-full max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-    <h1 class="text-xl font-bold mb-4">Enter Username</h1>
-    <input id="usernameInput" type="text" placeholder="Your username" class="w-full border rounded p-2 mb-4 text-black" />
-    <button onclick="login()" class="bg-blue-500 text-white px-4 py-2 rounded w-full">
-      Join Chat
-    </button>
-  </div>
-
-  <!-- Groups List -->
-  <div id="groupsPage" class="hidden w-full max-w-2xl flex flex-col bg-white dark:bg-gray-800 rounded shadow-lg h-[85vh] mt-6 p-4">
-    <div class="font-bold text-lg mb-2 flex justify-between items-center">
-      Groups
-      <button onclick="backToGroups()" class="hidden" id="backToGroupsBtn"></button>
-    </div>
-    <div id="groupsList" class="flex-1 overflow-y-auto mb-4"></div>
-    <div class="flex gap-2">
-      <input id="newGroupName" type="text" placeholder="New group name" class="flex-1 border rounded p-2 text-black" />
-      <button onclick="createGroup()" class="bg-green-600 text-white px-4 rounded">
-        Create Group
-      </button>
-    </div>
-  </div>
-
-  <!-- Chat Page -->
-  <div id="chatPage" class="hidden w-full max-w-2xl flex flex-col bg-white dark:bg-gray-800 rounded shadow-lg h-[85vh] mt-6">
-    <div class="p-4 border-b dark:border-gray-700 font-bold text-lg flex justify-between items-center">
-      <button onclick="backToGroups()" class="bg-gray-300 dark:bg-gray-700 px-2 py-1 rounded mr-4">← Groups</button>
-      <div id="groupTitle" class="flex-1"></div>
-      <span id="currentUserLabel" class="text-xs italic"></span>
-    </div>
-    <div id="messages" class="flex-1 overflow-y-auto p-4 flex flex-col space-y-2"></div>
-    <div class="p-3 flex items-center gap-2 border-t dark:border-gray-700">
-      <button id="emojiBtn" class="text-2xl">😊</button>
-      <input id="messageInput" type="text" placeholder="Type a message" class="flex-1 p-2 border rounded text-sm text-black" />
-      <input type="file" id="imageInput" accept="image/*" onchange="previewImage(event)" class="hidden" />
-      <button onclick="document.getElementById('imageInput').click()" class="bg-gray-300 dark:bg-gray-700 px-2 py-1 rounded text-sm">📷</button>
-      <button onclick="sendMessage()" class="bg-blue-600 text-white px-4 py-1 rounded">Send</button>
-    </div>
-  </div>
-</body>
-</html>
+      // Add message doc
+     
