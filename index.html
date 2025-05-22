@@ -7,11 +7,14 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="login">
-    <input id="username" placeholder="Your name"/>
-    <input id="pfp" placeholder="Profile pic URL" />
-    <button onclick="joinChat()">Join Chat</button>
+ <div id="login">
+  <div class="login-box">
+    <h2>Join Chat</h2>
+    <input id="username" placeholder="Enter your name" />
+    <input id="pfp" placeholder="Paste profile picture URL (optional)" />
+    <button onclick="joinChat()">Start Chat</button>
   </div>
+</div>
 
   <div id="chat" class="hidden">
     <div id="chat-header"><img id="pfp-display"><span id="user-display"></span></div>
