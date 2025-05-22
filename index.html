@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" >
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -18,7 +18,10 @@
       doc,
       getDocs,
       deleteDoc,
+      updateDoc,
       serverTimestamp,
+      setDoc,
+      getDoc,
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import {
       getStorage,
@@ -27,7 +30,7 @@
       getDownloadURL,
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
-    // ** Corrected Firebase config here **
+    // Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
       authDomain: "chatting-fd641.firebaseapp.com",
@@ -45,6 +48,7 @@
     let currentUser = null;
     let selectedImage = null;
     let currentGroupId = null;
+    let typingTimeout;
 
     // Elements
     const loginSection = document.getElementById("login-section");
@@ -56,6 +60,8 @@
     const messagesList = document.getElementById("messages");
     const currentUserLabel = document.getElementById("currentUserLabel");
     const groupTitle = document.getElementById("groupTitle");
+    const typingIndicator = document.getElementById("typingIndicator");
+    const darkModeToggle = document.getElementById("darkModeToggle");
 
     loginBtn.addEventListener("click", () => {
       const name = usernameInput.value.trim();
@@ -71,21 +77,39 @@
       chatUI.style.display = "flex";
       currentUserLabel.textContent = `Logged in as: ${currentUser.displayName}`;
       loadGroups();
+      applySavedTheme();
     });
 
+    // Dark mode toggle & localStorage
+    darkModeToggle.addEventListener("click", () => {
+      document.body.classList.toggle("dark");
+      localStorage.setItem(
+        "theme",
+        document.body.classList.contains("dark") ? "dark" : "light"
+      );
+    });
+
+    function applySavedTheme() {
+      const theme = localStorage.getItem("theme") || "light";
+      if (theme === "dark") document.body.classList.add("dark");
+      else document.body.classList.remove("dark");
+    }
+
     async function loadGroups() {
-      groupsList.innerHTML = "<p class='text-gray-500'>Loading groups...</p>";
+      groupsList.innerHTML = "<p class='text-gray-500 dark:text-gray-400'>Loading groups...</p>";
       const groupsRef = collection(db, "groups");
       onSnapshot(groupsRef, (snapshot) => {
         groupsList.innerHTML = "";
         if (snapshot.empty) {
-          groupsList.innerHTML = "<p class='text-gray-500'>No groups yet. Create one!</p>";
+          groupsList.innerHTML =
+            "<p class='text-gray-500 dark:text-gray-400'>No groups yet. Create one!</p>";
           return;
         }
         snapshot.forEach((docSnap) => {
           const group = docSnap.data();
           const container = document.createElement("div");
-          container.className = "p-3 border rounded mb-2 flex justify-between items-center hover:bg-blue-100 dark:hover:bg-gray-700 cursor-pointer";
+          container.className =
+            "p-3 border rounded mb-2 flex justify-between items-center hover:bg-blue-100 dark:hover:bg-gray-700 cursor-pointer";
 
           const nameDiv = document.createElement("div");
           nameDiv.textContent = group.name;
@@ -117,6 +141,10 @@
         const deletePromises = messagesSnap.docs.map((doc) => deleteDoc(doc.ref));
         await Promise.all(deletePromises);
 
+        // Delete typing doc
+        const typingDocRef = doc(db, "groups", groupId, "typing", currentUser.uid);
+        await deleteDoc(typingDocRef).catch(() => {});
+
         // Delete the group document
         await deleteDoc(doc(db, "groups", groupId));
         alert("Group deleted successfully.");
@@ -146,6 +174,8 @@
       groupTitle.textContent = groupName;
       showChatUI();
       listenToMessages(groupId);
+      listenToTyping(groupId);
+      clearTyping();
     }
 
     function showChatUI() {
@@ -174,14 +204,16 @@
       }
 
       try {
-        await addDoc(collection(db, "groups", currentGroupId, "messages"), {
+        const messageRef = await addDoc(collection(db, "groups", currentGroupId, "messages"), {
           uid: currentUser.uid,
           username: currentUser.displayName,
           text: text || null,
           imageUrl: imageUrl || null,
           timestamp: serverTimestamp(),
+          reactions: {},  // reactions object {emoji: [userIds]}
         });
         textInput.value = "";
+        clearTyping();
       } catch (error) {
         alert("Failed to send message: " + error.message);
       }
@@ -192,99 +224,229 @@
       const q = query(messagesRef, orderBy("timestamp", "asc"));
       onSnapshot(q, (snapshot) => {
         messagesList.innerHTML = "";
-        snapshot.forEach((doc) => {
-          const msg = doc.data();
+        snapshot.forEach((docSnap) => {
+          const msg = docSnap.data();
+          const id = docSnap.id;
+
           const msgDiv = document.createElement("div");
           msgDiv.className =
-            "p-2 rounded-lg max-w-[70%] mb-2 flex flex-col " +
+            "p-2 rounded-lg max-w-[70%] mb-2 flex flex-col relative " +
             (msg.uid === currentUser.uid
-              ? "bg-blue-500 text-white self-end"
-              : "bg-gray-200 text-black self-start dark:bg-gray-700 dark:text-white");
-          // Construct inner HTML safely
-          let contentHTML = `<div class="text-xs mb-1 opacity-70">${escapeHTML(msg.username)}</div>`;
-          if (msg.text) contentHTML += `<div>${escapeHTML(msg.text)}</div>`;
-          if (msg.imageUrl) contentHTML += `<img src="${msg.imageUrl}" alt="image" class="mt-2 rounded shadow max-w-[200px]" />`;
-          msgDiv.innerHTML = contentHTML;
+              ? "self-end bg-blue-600 text-white"
+              : "self-start bg-gray-300 dark:bg-gray-600 text-black dark:text-white");
+
+          // Text content (editable)
+          const textEl = document.createElement("div");
+          textEl.className = "whitespace-pre-wrap break-words";
+          textEl.textContent = msg.text || "";
+          textEl.contentEditable = false;
+          msgDiv.appendChild(textEl);
+
+          // Image content
+          if (msg.imageUrl) {
+            const img = document.createElement("img");
+            img.src = msg.imageUrl;
+            img.alt = "Image";
+            img.className = "max-w-full max-h-60 rounded mt-1 cursor-pointer";
+            img.onclick = () => window.open(msg.imageUrl, "_blank");
+            msgDiv.appendChild(img);
+          }
+
+          // Reactions container
+          const reactionsDiv = document.createElement("div");
+          reactionsDiv.className = "mt-1 flex gap-1";
+
+          // Show reactions with counts
+          const reactions = msg.reactions || {};
+          for (const [emoji, userIds] of Object.entries(reactions)) {
+            const btn = document.createElement("button");
+            btn.textContent = `${emoji} ${userIds.length}`;
+            btn.className =
+              "text-sm px-1 rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600";
+            btn.onclick = async () => {
+              await toggleReaction(groupId, id, emoji);
+            };
+            reactionsDiv.appendChild(btn);
+          }
+          msgDiv.appendChild(reactionsDiv);
+
+          // Buttons for edit/delete only on own messages
+          if (msg.uid === currentUser.uid) {
+            const controlsDiv = document.createElement("div");
+            controlsDiv.className = "absolute top-0 right-0 flex gap-1";
+
+            // Edit button
+            const editBtn = document.createElement("button");
+            editBtn.textContent = "✏️";
+            editBtn.title = "Edit message";
+            editBtn.className =
+              "text-xs bg-gray-400 hover:bg-gray-500 text-white rounded px-1";
+            editBtn.onclick = () => enableEdit(textEl, id);
+
+            // Delete button
+            const deleteBtn = document.createElement("button");
+            deleteBtn.textContent = "🗑️";
+            deleteBtn.title = "Delete message";
+            deleteBtn.className =
+              "text-xs bg-red-500 hover:bg-red-600 text-white rounded px-1";
+            deleteBtn.onclick = async () => {
+              if (confirm("Delete this message?")) {
+                await deleteDoc(doc(db, "groups", groupId, "messages", id));
+              }
+            };
+
+            controlsDiv.appendChild(editBtn);
+            controlsDiv.appendChild(deleteBtn);
+            msgDiv.appendChild(controlsDiv);
+          }
+
           messagesList.appendChild(msgDiv);
         });
         messagesList.scrollTop = messagesList.scrollHeight;
       });
     }
 
-    function previewImage(event) {
-      selectedImage = event.target.files[0];
+    // Enable editing a message
+    function enableEdit(textEl, messageId) {
+      if (textEl.contentEditable === "true") return; // already editing
+
+      textEl.contentEditable = "true";
+      textEl.focus();
+
+      // Save changes on Enter or blur
+      function saveEdit(e) {
+        if (
+          (e.type === "keydown" && e.key === "Enter") ||
+          e.type === "blur"
+        ) {
+          e.preventDefault();
+          textEl.contentEditable = "false";
+          updateMessageText(messageId, textEl.textContent.trim());
+          textEl.removeEventListener("keydown", saveEdit);
+          textEl.removeEventListener("blur", saveEdit);
+        }
+      }
+      textEl.addEventListener("keydown", saveEdit);
+      textEl.addEventListener("blur", saveEdit);
     }
 
+    async function updateMessageText(messageId, newText) {
+      if (!currentGroupId) return;
+      try {
+        const msgDoc = doc(db, "groups", currentGroupId, "messages", messageId);
+        await updateDoc(msgDoc, { text: newText });
+      } catch (e) {
+        alert("Failed to update message: " + e.message);
+      }
+    }
+
+    // Reaction toggle
+    async function toggleReaction(groupId, messageId, emoji) {
+      const msgDoc = doc(db, "groups", groupId, "messages", messageId);
+      const docSnap = await getDoc(msgDoc);
+      if (!docSnap.exists()) return;
+
+      const data = docSnap.data();
+      const reactions = data.reactions || {};
+      const users = reactions[emoji] || [];
+
+      const userIndex = users.indexOf(currentUser.uid);
+      if (userIndex === -1) {
+        users.push(currentUser.uid);
+      } else {
+        users.splice(userIndex, 1);
+      }
+      reactions[emoji] = users;
+
+      await updateDoc(msgDoc, { reactions });
+    }
+
+    // Typing indicator
+
+    const typingRef = () => doc(db, "groups", currentGroupId, "typing", currentUser.uid);
+
+    async function setTyping(typing) {
+      if (!currentGroupId) return;
+      const docRef = typingRef();
+      if (typing) {
+        await setDoc(docRef, { uid: currentUser.uid, username: currentUser.displayName, timestamp: serverTimestamp() });
+      } else {
+        await deleteDoc(docRef).catch(() => {});
+      }
+    }
+
+    function clearTyping() {
+      setTyping(false);
+    }
+
+    let typingUsers = new Set();
+
+    function listenToTyping(groupId) {
+      const typingCollection = collection(db, "groups", groupId, "typing");
+      onSnapshot(typingCollection, (snapshot) => {
+        typingUsers.clear();
+        snapshot.docs.forEach((doc) => {
+          if (doc.id !== currentUser.uid) {
+            const data = doc.data();
+            if (data && data.username) typingUsers.add(data.username);
+          }
+        });
+        updateTypingIndicator();
+      });
+    }
+
+    function updateTypingIndicator() {
+      if (typingUsers.size === 0) {
+        typingIndicator.textContent = "";
+      } else if (typingUsers.size === 1) {
+        typingIndicator.textContent = `${[...typingUsers][0]} is typing...`;
+      } else {
+        typingIndicator.textContent = "Several people are typing...";
+      }
+    }
+
+    // Handle input typing event
+    const messageInput = document.getElementById("messageInput");
+    messageInput.addEventListener("input", () => {
+      setTyping(true);
+      if (typingTimeout) clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => setTyping(false), 2000);
+    });
+
+    // Back to groups
     function backToGroups() {
       currentGroupId = null;
       document.getElementById("chatPage").classList.add("hidden");
       document.getElementById("groupsPage").classList.remove("hidden");
       messagesList.innerHTML = "";
+      groupTitle.textContent = "Group Name";
+      typingIndicator.textContent = "";
     }
 
-    // Simple HTML escape function to prevent injection
-    function escapeHTML(str) {
-      return str.replace(/[&<>"']/g, (match) => {
-        const escapeMap = {
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;",
-        };
-        return escapeMap[match];
-      });
+    // Image preview and selection
+    function previewImage(event) {
+      selectedImage = event.target.files[0];
     }
 
-    window.createGroup = createGroup;
-    window.sendMessage = sendMessage;
-    window.previewImage = previewImage;
-    window.backToGroups = backToGroups;
+    // Emoji picker
+    const picker = new EmojiButton({
+      position: "top-start",
+      theme: "auto",
+    });
+    document.getElementById("emojiBtn").addEventListener("click", () => {
+      picker.togglePicker(document.getElementById("emojiBtn"));
+    });
+    picker.on("emoji", (selection) => {
+      messageInput.value += selection.emoji;
+      messageInput.focus();
+    });
 
-    window.onload = () => {
-      const picker = new EmojiButton();
-      const trigger = document.querySelector("#emojiBtn");
-      picker.on("emoji", (emoji) => {
-        const input = document.getElementById("messageInput");
-        input.value += emoji;
-        input.focus();
-      });
-      trigger.addEventListener("click", () => picker.togglePicker(trigger));
-    };
   </script>
-
-  <style>
-    body.dark {
-      background-color: #1a202c;
-      color: white;
-    }
-    .dark input,
-    .dark textarea {
-      color: black;
-    }
-    /* WhatsApp-like scrollbar */
-    #groupsList::-webkit-scrollbar,
-    #messages::-webkit-scrollbar {
-      width: 6px;
-    }
-    #groupsList::-webkit-scrollbar-thumb,
-    #messages::-webkit-scrollbar-thumb {
-      background-color: rgba(0, 0, 0, 0.2);
-      border-radius: 3px;
-    }
-  </style>
 </head>
-
-<body
-  class="min-h-screen bg-gray-100 dark:bg-gray-900 text-black dark:text-white flex flex-col items-center p-4"
->
-  <!-- Login section -->
-  <div
-    id="login-section"
-    class="w-full max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow p-6"
-  >
-    <h1 class="text-2xl font-bold mb-4 text-center text-gray-900 dark:text-gray-100">
-      Enter your name
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col items-center justify-center min-h-screen p-4 transition-colors duration-300">
+  <div id="login-section" class="max-w-md w-full bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+    <h1 class="text-3xl font-bold mb-6 text-center text-blue-700 dark:text-blue-400">
+      Only For Her - Chat App
     </h1>
     <input
       id="username-input"
@@ -300,7 +462,6 @@
     </button>
   </div>
 
-  <!-- Main Chat UI -->
   <div
     id="chat-ui"
     class="hidden w-full max-w-4xl flex flex-col md:flex-row bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden"
@@ -332,6 +493,13 @@
       >
         <!-- Groups loaded here -->
       </div>
+      <button
+        id="darkModeToggle"
+        class="mt-4 w-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 py-2 rounded font-semibold transition"
+        title="Toggle Dark Mode"
+      >
+        Toggle Dark Mode
+      </button>
     </div>
 
     <!-- Chat Section -->
@@ -340,7 +508,7 @@
       class="hidden w-full md:w-2/3 flex flex-col p-4"
       style="height: 100%;"
     >
-      <div class="flex justify-between items-center mb-3">
+      <div class="flex justify-between items-center mb-1">
         <button
           onclick="backToGroups()"
           class="text-blue-600 hover:text-blue-800 font-semibold"
@@ -356,26 +524,28 @@
         <div id="currentUserLabel" class="opacity-70 text-sm"></div>
       </div>
       <div
-        id="messages"
-        class="flex-grow bg-gray-50 dark:bg-gray-700 p-4 rounded-lg overflow-y-auto mb-4"
+        id="typingIndicator"
+        class="text-sm italic text-gray-600 dark:text-gray-400 mb-1 h-4"
+      ></div>
+      <div
+        id="messagesList"
+        class="flex-grow overflow-y-auto space-y-3 p-2 border border-gray-300 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-900"
       >
-        <!-- Messages here -->
+        <!-- Messages loaded here -->
       </div>
-      <div class="flex items-center gap-2">
+      <div class="mt-2 flex gap-2 items-center">
         <button
           id="emojiBtn"
-          class="text-2xl hover:bg-gray-300 dark:hover:bg-gray-600 rounded px-2"
-          title="Emoji picker"
-          type="button"
+          class="text-2xl hover:bg-gray-200 dark:hover:bg-gray-700 rounded p-1"
+          title="Insert emoji"
         >
-          😀
+          😊
         </button>
         <input
           id="messageInput"
           type="text"
-          placeholder="Type a message"
+          placeholder="Type your message..."
           class="flex-grow p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-600 dark:bg-gray-700 dark:border-gray-600"
-          onkeydown="if(event.key==='Enter'){sendMessage()}"
         />
         <input
           id="imageInput"
@@ -386,14 +556,15 @@
         />
         <button
           onclick="document.getElementById('imageInput').click()"
+          class="text-xl hover:bg-gray-200 dark:hover:bg-gray-700 rounded p-1"
           title="Attach image"
-          class="text-xl hover:bg-gray-300 dark:hover:bg-gray-600 rounded px-3"
         >
           📎
         </button>
         <button
           onclick="sendMessage()"
           class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-semibold"
+          title="Send message"
         >
           Send
         </button>
