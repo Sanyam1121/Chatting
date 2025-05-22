@@ -3,29 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Group Chat with Google Login</title>
+  <title>Anonymous Group Chat</title>
   <script type="module">
-    // Firebase imports
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-    import {
-      getAuth,
-      signInWithPopup,
-      GoogleAuthProvider,
-      signOut,
-      onAuthStateChanged,
-    } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
     import {
       getFirestore,
       collection,
       addDoc,
       query,
-      where,
       onSnapshot,
       serverTimestamp,
       orderBy,
       doc,
-      setDoc,
       getDoc,
+      setDoc
     } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
     import {
       getStorage,
@@ -34,7 +25,6 @@
       getDownloadURL,
     } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-storage.js";
 
-    // Your Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
       authDomain: "chatting-fd641.firebaseapp.com",
@@ -45,14 +35,14 @@
       measurementId: "G-RKS4CFZPJ4"
     };
 
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
     const db = getFirestore(app);
     const storage = getStorage(app);
 
-    // UI elements
-    const loginPage = document.getElementById("loginPage");
+    // Generate random user name once per session
+    const userName = "User" + Math.floor(Math.random() * 9000 + 1000);
+
+    // UI references
     const groupsPage = document.getElementById("groupsPage");
     const chatPage = document.getElementById("chatPage");
     const userLabel = document.getElementById("userLabel");
@@ -65,28 +55,12 @@
     let currentGroupId = null;
     let unsubscribeMessages = null;
 
-    // Show only one page at a time
+    userLabel.textContent = `You are: ${userName}`;
+
     function showPage(page) {
-      loginPage.classList.add("hidden");
       groupsPage.classList.add("hidden");
       chatPage.classList.add("hidden");
       page.classList.remove("hidden");
-    }
-
-    // Google login handler
-    async function loginWithGoogle() {
-      const provider = new GoogleAuthProvider();
-      try {
-        await signInWithPopup(auth, provider);
-      } catch (error) {
-        alert("Login failed: " + error.message);
-      }
-    }
-
-    // Logout
-    async function logout() {
-      if (unsubscribeMessages) unsubscribeMessages();
-      await signOut(auth);
     }
 
     // Load groups list
@@ -106,7 +80,6 @@
       });
     }
 
-    // Create group
     async function createGroup() {
       const groupNameInput = document.getElementById("newGroupName");
       const name = groupNameInput.value.trim();
@@ -122,7 +95,6 @@
       }
     }
 
-    // Open group chat
     function openGroupChat(groupId, groupName) {
       currentGroupId = groupId;
       groupTitle.textContent = groupName;
@@ -136,11 +108,11 @@
         snapshot.forEach((docSnap) => {
           const msg = docSnap.data();
           const div = document.createElement("div");
-          div.className = msg.uid === auth.currentUser.uid ? "self-message" : "other-message";
-          if(msg.text) {
-            div.textContent = msg.text;
+          div.className = msg.userName === userName ? "self-message" : "other-message";
+          if (msg.text) {
+            div.textContent = `${msg.userName}: ${msg.text}`;
           }
-          if(msg.imageUrl) {
+          if (msg.imageUrl) {
             const img = document.createElement("img");
             img.src = msg.imageUrl;
             img.style.maxWidth = "200px";
@@ -153,7 +125,6 @@
       });
     }
 
-    // Send message
     async function sendMessage() {
       if (!currentGroupId) return alert("Select a group first");
       const text = messageInput.value.trim();
@@ -163,7 +134,6 @@
 
       let imageUrl = null;
       if (file) {
-        // Upload image
         const storageRef = ref(storage, `images/${currentGroupId}/${Date.now()}_${file.name}`);
         await uploadBytes(storageRef, file);
         imageUrl = await getDownloadURL(storageRef);
@@ -171,8 +141,7 @@
 
       try {
         await addDoc(collection(db, "groups", currentGroupId, "messages"), {
-          uid: auth.currentUser.uid,
-          displayName: auth.currentUser.displayName,
+          userName,
           text: text || null,
           imageUrl,
           createdAt: serverTimestamp(),
@@ -184,28 +153,16 @@
       }
     }
 
-    // On auth state changed
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        userLabel.textContent = `Hello, ${user.displayName}`;
-        showPage(groupsPage);
-        loadGroups();
-      } else {
-        userLabel.textContent = "";
-        showPage(loginPage);
-        if (unsubscribeMessages) {
-          unsubscribeMessages();
-          unsubscribeMessages = null;
-        }
-      }
-    });
+    // Initialize
+    showPage(groupsPage);
+    loadGroups();
 
-    // Expose functions globally for buttons
-    window.loginWithGoogle = loginWithGoogle;
-    window.logout = logout;
     window.createGroup = createGroup;
+    window.openGroupChat = openGroupChat;
     window.sendMessage = sendMessage;
+
   </script>
+
   <style>
     body {
       font-family: system-ui, sans-serif;
@@ -214,7 +171,7 @@
       color: white;
     }
     .hidden { display: none; }
-    #loginPage, #groupsPage, #chatPage {
+    #groupsPage, #chatPage {
       max-width: 480px;
       margin: auto;
       background: #1e1e1e;
@@ -270,17 +227,10 @@
   </style>
 </head>
 <body>
-  <!-- Login Page -->
-  <div id="loginPage">
-    <h2>Login with Google</h2>
-    <button onclick="loginWithGoogle()">Sign in with Google</button>
-  </div>
-
-  <!-- Groups Page -->
-  <div id="groupsPage" class="hidden">
-    <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-      <span id="userLabel"></span>
-      <button onclick="logout()">Logout</button>
+  <div id="groupsPage">
+    <div style="margin-bottom: 1rem;">
+      <strong id="userLabel"></strong>
+      <button onclick="location.reload()">Reset Name</button>
     </div>
     <h2>Groups</h2>
     <div style="margin-bottom: 1rem;">
@@ -290,7 +240,6 @@
     <div id="groupsList"></div>
   </div>
 
-  <!-- Chat Page -->
   <div id="chatPage" class="hidden" style="display:flex; flex-direction: column;">
     <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
       <button onclick="showPage(groupsPage)">← Back to Groups</button>
