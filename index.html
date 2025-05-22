@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" >
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Only For her</title>
+  <title>Firebase Group Chat - Name Login</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.min.js"></script>
   <script type="module">
@@ -16,24 +16,17 @@
       query,
       orderBy,
       doc,
-      getDoc,
-      setDoc,
-      updateDoc,
-      serverTimestamp,
-      deleteDoc,
       getDocs,
-      where,
-      limit
+      deleteDoc,
+      serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import {
       getStorage,
       ref,
       uploadBytes,
       getDownloadURL,
-      deleteObject,
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
-    // --- Firebase config and init ---
     const firebaseConfig = {
       apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
       authDomain: "chatting-fd641.firebaseapp.com",
@@ -48,114 +41,45 @@
     const db = getFirestore(app);
     const storage = getStorage(app);
 
-    // --- Globals ---
-    let username = "";
-    let avatarUrl = "";
-    let selectedImages = []; // support multiple images
+    // User info, no auth, just name and random id:
+    let currentUser = null;
+    let selectedImage = null;
     let currentGroupId = null;
-    let userDocId = null;
-    let editingMessageId = null; // message being edited
-    let typingTimeout = null;
-    let isTyping = false;
-    let emojiPicker;
 
-    // DOM getters
-    const loginPage = () => document.getElementById("loginPage");
-    const groupsPage = () => document.getElementById("groupsPage");
-    const chatPage = () => document.getElementById("chatPage");
-    const groupsList = () => document.getElementById("groupsList");
-    const messagesList = () => document.getElementById("messages");
-    const currentUserLabel = () => document.getElementById("currentUserLabel");
-    const groupTitle = () => document.getElementById("groupTitle");
-    const typingLabel = () => document.getElementById("typingLabel");
-    const pinnedMsgDiv = () => document.getElementById("pinnedMessage");
-    const searchInput = () => document.getElementById("searchInput");
-    const avatarInput = () => document.getElementById("avatarInput");
+    // Elements
+    const loginSection = document.getElementById("login-section");
+    const chatUI = document.getElementById("chat-ui");
+    const usernameInput = document.getElementById("username-input");
+    const loginBtn = document.getElementById("login-btn");
 
-    // Show/hide pages
-    function showPage(page) {
-      loginPage().classList.add("hidden");
-      groupsPage().classList.add("hidden");
-      chatPage().classList.add("hidden");
-      page.classList.remove("hidden");
-    }
+    const groupsList = document.getElementById("groupsList");
+    const messagesList = document.getElementById("messages");
+    const currentUserLabel = document.getElementById("currentUserLabel");
+    const groupTitle = document.getElementById("groupTitle");
 
-    // Utility to upload avatar or images
-    async function uploadFile(file, folder = "images") {
-      const storageRef = ref(storage, folder + "/" + Date.now() + "-" + file.name);
-      await uploadBytes(storageRef, file);
-      return getDownloadURL(storageRef);
-    }
-
-    // Login user, create/update user doc in Firestore for presence and avatar
-    async function login() {
-      const nameInput = document.getElementById("usernameInput");
-      username = nameInput.value.trim();
-      if (!username) return alert("Enter a username");
-
-      // Upload avatar if chosen
-      if (avatarInput().files.length) {
-        avatarUrl = await uploadFile(avatarInput().files[0], "avatars");
-      } else {
-        avatarUrl = ""; // no avatar chosen
+    loginBtn.addEventListener("click", () => {
+      const name = usernameInput.value.trim();
+      if (!name) {
+        alert("Please enter your name");
+        return;
       }
-
-      // Create or update user document for presence and avatar
-      const usersRef = collection(db, "users");
-      // Check if username already exists
-      const q = query(usersRef, where("username", "==", username), limit(1));
-      const querySnap = await getDocs(q);
-      if (!querySnap.empty) {
-        userDocId = querySnap.docs[0].id;
-        await updateDoc(doc(db, "users", userDocId), {
-          avatarUrl,
-          online: true,
-          lastActive: serverTimestamp(),
-        });
-      } else {
-        const userDoc = await addDoc(usersRef, {
-          username,
-          avatarUrl,
-          online: true,
-          lastActive: serverTimestamp(),
-        });
-        userDocId = userDoc.id;
-      }
-
-      currentUserLabel().textContent = `Logged in as: ${username}`;
-      showPage(groupsPage());
+      currentUser = {
+        uid: "user-" + Math.random().toString(36).substring(2, 10),
+        displayName: name,
+      };
+      loginSection.style.display = "none";
+      chatUI.style.display = "flex";
+      currentUserLabel.textContent = `Logged in as: ${currentUser.displayName}`;
       loadGroups();
-      setupPresence();
-    }
+    });
 
-    // Setup presence tracking (online/offline)
-    function setupPresence() {
-      window.addEventListener("beforeunload", async () => {
-        if (userDocId) {
-          await updateDoc(doc(db, "users", userDocId), {
-            online: false,
-            lastActive: serverTimestamp(),
-          });
-        }
-      });
-      // Periodically update lastActive to keep presence fresh
-      setInterval(async () => {
-        if (userDocId) {
-          await updateDoc(doc(db, "users", userDocId), {
-            lastActive: serverTimestamp(),
-          });
-        }
-      }, 30000);
-    }
-
-    // Load groups from Firestore
     async function loadGroups() {
-      groupsList().innerHTML = "Loading groups...";
+      groupsList.innerHTML = "Loading groups...";
       const groupsRef = collection(db, "groups");
       onSnapshot(groupsRef, (snapshot) => {
-        groupsList().innerHTML = "";
+        groupsList.innerHTML = "";
         if (snapshot.empty) {
-          groupsList().innerHTML = "<p class='text-gray-500'>No groups yet. Create one!</p>";
+          groupsList.innerHTML = "<p class='text-gray-500'>No groups yet. Create one!</p>";
           return;
         }
         snapshot.forEach((docSnap) => {
@@ -165,18 +89,8 @@
 
           const nameDiv = document.createElement("div");
           nameDiv.textContent = group.name;
-          nameDiv.className = "cursor-pointer flex-1 font-semibold";
+          nameDiv.className = "cursor-pointer flex-1";
           nameDiv.onclick = () => enterGroup(docSnap.id, group.name);
-
-          // Show member count
-          const memberCountSpan = document.createElement("span");
-          memberCountSpan.className = "ml-2 text-xs text-gray-600 dark:text-gray-400";
-          memberCountSpan.textContent = group.memberCount ? `(${group.memberCount} members)` : "";
-
-          // Pin message snippet preview
-          const pinSnippet = document.createElement("div");
-          pinSnippet.className = "text-xs italic text-gray-500 dark:text-gray-400 truncate max-w-xs";
-          pinSnippet.textContent = group.pinnedMessage?.text ? `📌 ${group.pinnedMessage.text.substring(0, 40)}` : "";
 
           const deleteBtn = document.createElement("button");
           deleteBtn.textContent = "❌";
@@ -189,32 +103,17 @@
           };
 
           container.appendChild(nameDiv);
-          container.appendChild(memberCountSpan);
-          container.appendChild(pinSnippet);
           container.appendChild(deleteBtn);
-          groupsList().appendChild(container);
+          groupsList.appendChild(container);
         });
       });
     }
 
-    // Delete group and all messages
     async function deleteGroup(groupId) {
       try {
         const messagesRef = collection(db, "groups", groupId, "messages");
         const messagesSnap = await getDocs(messagesRef);
-        const deletePromises = messagesSnap.docs.map(async (msgDoc) => {
-          // Delete image from storage if exists
-          const msg = msgDoc.data();
-          if (msg.imageUrls?.length) {
-            for (const url of msg.imageUrls) {
-              try {
-                const fileRef = ref(storage, url.split('?')[0].split('/').slice(-1)[0]);
-                await deleteObject(fileRef);
-              } catch {}
-            }
-          }
-          await deleteDoc(msgDoc.ref);
-        });
+        const deletePromises = messagesSnap.docs.map((doc) => deleteDoc(doc.ref));
         await Promise.all(deletePromises);
         await deleteDoc(doc(db, "groups", groupId));
         alert("Group deleted successfully.");
@@ -224,1484 +123,159 @@
       }
     }
 
-    // Create new group
     async function createGroup() {
       const groupNameInput = document.getElementById("newGroupName");
       const name = groupNameInput.value.trim();
       if (!name) return alert("Enter a group name");
-
-      // Initialize group with memberCount=1 and pinnedMessage null
       await addDoc(collection(db, "groups"), {
         name,
         createdAt: serverTimestamp(),
-        memberCount: 1,
-        pinnedMessage: null,
-        admins: [username], // creator is admin
       });
       groupNameInput.value = "";
     }
 
-    // Enter a group and start listening for messages
     async function enterGroup(groupId, groupName) {
       currentGroupId = groupId;
-      groupTitle().textContent = groupName;
-      editingMessageId = null;
-      showPage(chatPage());
-      loadPinnedMessage(groupId);
+      groupTitle.textContent = groupName;
+      showChatUI();
       listenToMessages(groupId);
-      listenToTyping(groupId);
-      loadOnlineUsers(groupId);
-      // Update memberCount (optimistic)
-      const groupDocRef = doc(db, "groups", groupId);
-      const groupSnap = await getDoc(groupDocRef);
-      if (groupSnap.exists()) {
-        const data = groupSnap.data();
-        // add user as admin if none exists (failsafe)
-        if (!data.admins || !data.admins.length) {
-          await updateDoc(groupDocRef, { admins: [username] });
-        }
-      }
     }
 
-    // Send message (new or edited)
+    function showChatUI() {
+      document.getElementById("groupsPage").classList.add("hidden");
+      document.getElementById("chatPage").classList.remove("hidden");
+    }
+
     async function sendMessage() {
       if (!currentGroupId) return alert("No group selected");
-      const input = document.getElementById("messageInput");
-      const text = input.value.trim();
-      if (!text && selectedImages.length === 0) return;
+      const text = document.getElementById("messageInput").value.trim();
+      if (!text && !selectedImage) return;
+      let imageUrl = null;
 
-      // If editing a message
-      if (editingMessageId) {
-        const msgDocRef = doc(db, "groups", currentGroupId, "messages", editingMessageId);
-        await updateDoc(msgDocRef, {
-          text,
-          edited: true,
-          editedAt: serverTimestamp(),
-        });
-        editingMessageId = null;
-        input.value = "";
-        selectedImages = [];
-        return;
+      if (selectedImage) {
+        const storageRef = ref(storage, "images/" + Date.now() + "-" + selectedImage.name);
+        await uploadBytes(storageRef, selectedImage);
+        imageUrl = await getDownloadURL(storageRef);
+        selectedImage = null;
       }
 
-      // Upload images if any
-      let imageUrls = [];
-      if (selectedImages.length > 0) {
-        for (const img of selectedImages) {
-          const url = await uploadFile(img);
-          imageUrls.push(url);
-        }
-        selectedImages = [];
-        document.getElementById("imageInput").value = "";
-      }
-
-      // Add message doc
       await addDoc(collection(db, "groups", currentGroupId, "messages"), {
-        text,
-        sender: username,
-        senderAvatar: avatarUrl,
-        createdAt: serverTimestamp(),
-        readBy: [username], // mark sender as read
-        reactions: {}, // reaction mapping: emoji => [usernames]
-        imageUrls,
+        uid: currentUser.uid,
+        username: currentUser.displayName,
+        text: text || null,
+        imageUrl: imageUrl || null,
+        timestamp: new Date(),
       });
 
-      input.value = "";
-      updateTypingStatus(false);
+      document.getElementById("messageInput").value = "";
+      document.getElementById("imageInput").value = "";
     }
 
-    // Listen to messages in group
     function listenToMessages(groupId) {
       const messagesRef = collection(db, "groups", groupId, "messages");
-      const q = query(messagesRef, orderBy("createdAt"));
+      const q = query(messagesRef, orderBy("timestamp", "asc"));
       onSnapshot(q, (snapshot) => {
-        messagesList().innerHTML = "";
-        if (snapshot.empty) {
-          messagesList().innerHTML = "<p class='text-gray-500'>No messages yet.</p>";
-          return;
-        }
-        snapshot.forEach((docSnap) => {
-          const msg = docSnap.data();
-          const msgId = docSnap.id;
-
-          const msgDiv = document.createElement("div");
-          msgDiv.className = `mb-3 p-2 rounded-lg max-w-xl break-words ${
-            msg.sender === username ? "bg-blue-100 text-black self-end" : "bg-gray-200 dark:bg-gray-700"
-          } relative flex flex-col`;
-
-          // Message header with avatar and username
-          const header = document.createElement("div");
-          header.className = "flex items-center mb-1 space-x-2";
-
-          // Avatar image or placeholder circle
-          const avatarImg = document.createElement("img");
-          avatarImg.src = msg.senderAvatar || "https://ui-avatars.com/api/?name=" + encodeURIComponent(msg.sender);
-          avatarImg.alt = msg.sender;
-          avatarImg.className = "w-6 h-6 rounded-full object-cover";
-
-          // Username clickable for mention
-          const usernameSpan = document.createElement("span");
-          usernameSpan.textContent = msg.sender;
-          usernameSpan.className = "font-semibold cursor-pointer hover:underline";
-          usernameSpan.title = "Click to mention";
-          usernameSpan.onclick = () => {
-            const input = document.getElementById("messageInput");
-            input.value += `@${msg.sender} `;
-            input.focus();
-          };
-
-          header.appendChild(avatarImg);
-          header.appendChild(usernameSpan);
-
-          msgDiv.appendChild(header);
-
-          // Message text with @mentions highlighted
-          const textDiv = document.createElement("div");
-          textDiv.className = "whitespace-pre-wrap";
-
-          // Highlight @mentions
-          const textWithMentions = msg.text.replace(/@(\w+)/g, `<span class="text-blue-600 font-semibold">@$1</span>`);
-          textDiv.innerHTML = textWithMentions;
-
-          msgDiv.appendChild(textDiv);
-
-          // Images if any
-          if (msg.imageUrls && msg.imageUrls.length) {
-            const imagesContainer = document.createElement("div");
-            imagesContainer.className = "mt-1 flex flex-wrap gap-1";
-            msg.imageUrls.forEach((url) => {
-              const imgEl = document.createElement("img");
-              imgEl.src = url;
-              imgEl.alt = "Image";
-              imgEl.className = "w-24 h-24 rounded-md object-cover cursor-pointer hover:opacity-80";
-              imgEl.onclick = () => window.open(url, "_blank");
-              imagesContainer.appendChild(imgEl);
-            });
-            msgDiv.appendChild(imagesContainer);
-          }
-
-          // Edited label
-          if (msg.edited) {
-            const editedLabel = document.createElement("span");
-            editedLabel.textContent = " (edited)";
-            editedLabel.className = "text-xs text-gray-500";
-            msgDiv.appendChild(editedLabel);
-          }
-
-          // Reactions bar
-          const reactionsDiv = document.createElement("div");
-          reactionsDiv.className = "flex space-x-1 mt-1";
-
-          // Show reactions emojis with counts
-          if (msg.reactions) {
-            for (const [emoji, users] of Object.entries(msg.reactions)) {
-              const reactBtn = document.createElement("button");
-              reactBtn.className = "px-1 rounded bg-gray-300 dark:bg-gray-600 text-xs flex items-center space-x-1 hover:bg-gray-400";
-              const emojiSpan = document.createElement("span");
-              emojiSpan.textContent = emoji;
-              const countSpan = document.createElement("span");
-              countSpan.textContent = users.length;
-              reactBtn.appendChild(emojiSpan);
-              reactBtn.appendChild(countSpan);
-              // Toggle reaction on click
-              reactBtn.onclick = async () => {
-                await toggleReaction(groupId, msgId, emoji);
-              };
-              reactionsDiv.appendChild(reactBtn);
-            }
-          }
-
-          // Add reaction button
-          const addReactBtn = document.createElement("button");
-          addReactBtn.className = "px-1 rounded bg-blue-200 dark:bg-blue-700 text-xs hover:bg-blue-300 dark:hover:bg-blue-800";
-          addReactBtn.textContent = "+";
-          addReactBtn.title = "Add reaction";
-          addReactBtn.onclick = () => {
-            emojiPicker.pickerPosition = "top-end";
-            emojiPicker.togglePicker(addReactBtn);
-            emojiPicker.on("emoji", async (selection) => {
-              await addReaction(groupId, msgId, selection.emoji);
-            });
-          };
-          reactionsDiv.appendChild(addReactBtn);
-
-          msgDiv.appendChild(reactionsDiv);
-
-          // Read receipts - small circle for each user who read this message (excluding sender)
-          const readByDiv = document.createElement("div");
-          readByDiv.className = "flex space-x-1 mt-1";
-
-          if (msg.readBy) {
-            msg.readBy.forEach((userRead) => {
-              if (userRead !== msg.sender) {
-                // Get avatar from users collection (cache if needed)
-                const userAvatar = "https://ui-avatars.com/api/?name=" + encodeURIComponent(userRead);
-                const avatarSmall = document.createElement("img");
-                avatarSmall.src = userAvatar;
-                avatarSmall.alt = userRead;
-                avatarSmall.title = `Read by ${userRead}`;
-                avatarSmall.className = "w-4 h-4 rounded-full";
-                readByDiv.appendChild(avatarSmall);
-              }
-            });
-          }
-          msgDiv.appendChild(readByDiv);
-
-          // Controls (edit, delete, pin) if sender is current user or admin
-          const controlsDiv = document.createElement("div");
-          controlsDiv.className = "absolute top-0 right-0 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity";
-
-          // Only show controls if message sender is current user or user is admin
-          checkIfAdmin().then((isAdmin) => {
-            if (msg.sender === username || isAdmin) {
-              // Edit button
-              const editBtn = document.createElement("button");
-              editBtn.title = "Edit message";
-              editBtn.textContent = "✏️";
-              editBtn.className = "text-xs";
-              editBtn.onclick = () => {
-                editingMessageId = msgId;
-                document.getElementById("messageInput").value = msg.text;
-                document.getElementById("messageInput").focus();
-              };
-
-              // Delete button
-              const deleteBtn = document.createElement("button");
-              deleteBtn.title = "Delete message";
-              deleteBtn.textContent = "🗑️";
-              deleteBtn.className = "text-xs";
-              deleteBtn.onclick = async () => {
-                if (confirm("Delete this message?")) {
-                  await deleteMessage(groupId, msgId, msg.imageUrls);
-                }
-              };
-
-              // Pin message button
-              const pinBtn = document.createElement("button");
-              pinBtn.title = "Pin this message";
-              pinBtn.textContent = "📌";
-              pinBtn.className = "text-xs";
-              pinBtn.onclick = async () => {
-                await pinMessage(groupId, msgId);
-              };
-
-              controlsDiv.appendChild(editBtn);
-              controlsDiv.appendChild(deleteBtn);
-              controlsDiv.appendChild(pinBtn);
-            }
-          });
-
-          msgDiv.classList.add("group");
-          msgDiv.appendChild(controlsDiv);
-
-          messagesList().appendChild(msgDiv);
-
-          // Mark message read by current user
-          markMessageRead(groupId, msgId, msg.readBy || []);
+        messagesList.innerHTML = "";
+        snapshot.forEach((doc) => {
+          const msg = doc.data();
+          const div = document.createElement("div");
+          div.className =
+            "p-2 rounded-lg max-w-[70%] mb-2 flex flex-col " +
+            (msg.uid === currentUser.uid
+              ? "bg-blue-500 text-white self-end"
+              : "bg-gray-200 text-black self-start dark:bg-gray-700 dark:text-white");
+          div.innerHTML =
+            `<div class="text-xs mb-1 opacity-70">${msg.username}</div>` +
+            (msg.text ? `<div>${msg.text}</div>` : "") +
+            (msg.imageUrl ? `<img src="${msg.imageUrl}" class="mt-2 rounded shadow max-w-[200px]"/>` : "");
+          messagesList.appendChild(div);
         });
-        messagesList().scrollTop = messagesList().scrollHeight;
+        messagesList.scrollTop = messagesList.scrollHeight;
       });
     }
 
-    // Mark message as read by current user
-    async function markMessageRead(groupId, msgId, readBy) {
-      if (!readBy.includes(username)) {
-        const msgDocRef = doc(db, "groups", groupId, "messages", msgId);
-        await updateDoc(msgDocRef, {
-          readBy: [...readBy, username],
-        });
-      }
+    function previewImage(event) {
+      selectedImage = event.target.files[0];
     }
 
-    // Delete message
-    async function deleteMessage(groupId, msgId, imageUrls = []) {
-      const msgDocRef = doc(db, "groups", groupId, "messages", msgId);
-      // Delete images from storage if any
-      if (imageUrls && imageUrls.length > 0) {
-        for (const url of imageUrls) {
-          try {
-            // Extract path from url
-            // Firebase storage url pattern: https://firebasestorage.googleapis.com/v0/b/<bucket>/o/<path>?alt=media&token=<token>
-            const path = decodeURIComponent(url.split("/o/")[1].split("?")[0]);
-            const fileRef = ref(storage, path);
-            await deleteObject(fileRef);
-          } catch {}
-        }
-      }
-      await deleteDoc(msgDocRef);
+    function backToGroups() {
+      currentGroupId = null;
+      document.getElementById("chatPage").classList.add("hidden");
+      document.getElementById("groupsPage").classList.remove("hidden");
     }
 
-    // Pin message (store pinned message text & id in group doc)
-    async function pinMessage(groupId, msgId) {
-      const msgDocRef = doc(db, "groups", groupId, "messages", msgId);
-      const msgSnap = await getDoc(msgDocRef);
-      if (!msgSnap.exists()) return alert("Message not found to pin.");
-      const msg = msgSnap.data();
+    window.createGroup = createGroup;
+    window.sendMessage = sendMessage;
+    window.previewImage = previewImage;
+    window.backToGroups = backToGroups;
 
-      const groupDocRef = doc(db, "groups", groupId);
-      await updateDoc(groupDocRef, {
-        pinnedMessage: {
-          id: msgId,
-          text: msg.text.substring(0, 200),
-          sender: msg.sender,
-          createdAt: msg.createdAt,
-        },
+    window.onload = () => {
+      const picker = new EmojiButton();
+      const trigger = document.querySelector("#emojiBtn");
+      picker.on("emoji", (emoji) => {
+        document.getElementById("messageInput").value += emoji;
       });
-      alert("Message pinned!");
-      loadPinnedMessage(groupId);
-    }
-
-    // Load pinned message for current group
-    async function loadPinnedMessage(groupId) {
-      const groupDocRef = doc(db, "groups", groupId);
-      const groupSnap = await getDoc(groupDocRef);
-      if (!groupSnap.exists()) {
-        pinnedMsgDiv().textContent = "";
-        return;
-      }
-      const pinned = groupSnap.data().pinnedMessage;
-      if (!pinned) {
-        pinnedMsgDiv().textContent = "";
-        return;
-      }
-      pinnedMsgDiv().innerHTML = `
-        <div class="bg-yellow-100 dark:bg-yellow-700 p-2 rounded-md">
-          <strong>📌 Pinned:</strong> ${pinned.text} <br/>
-          <small>by <em>${pinned.sender}</em></small>
-        </div>
-      `;
-    }
-
-    // Toggle reaction on message
-    async function toggleReaction(groupId, msgId, emoji) {
-      const msgDocRef = doc(db, "groups", groupId, "messages", msgId);
-      const msgSnap = await getDoc(msgDocRef);
-      if (!msgSnap.exists()) return;
-      const msg = msgSnap.data();
-
-      const reactions = msg.reactions || {};
-      const userList = reactions[emoji] || [];
-
-      if (userList.includes(username)) {
-        // Remove reaction
-        reactions[emoji] = userList.filter((u) => u !== username);
-        if (reactions[emoji].length === 0) delete reactions[emoji];
-      } else {
-        // Add reaction
-        reactions[emoji] = [...userList, username];
-      }
-
-      await updateDoc(msgDocRef, { reactions });
-    }
-
-    // Add reaction (always add, not toggle)
-    async function addReaction(groupId, msgId, emoji) {
-      const msgDocRef = doc(db, "groups", groupId, "messages", msgId);
-      const msgSnap = await getDoc(msgDocRef);
-      if (!msgSnap.exists()) return;
-      const msg = msgSnap.data();
-
-      const reactions = msg.reactions || {};
-      const userList = reactions[emoji] || [];
-
-      if (!userList.includes(username)) {
-        reactions[emoji] = [...userList, username];
-        await updateDoc(msgDocRef, { reactions });
-      }
-    }
-
-    // Listen typing status for current group
-    function listenToTyping(groupId) {
-      const typingRef = collection(db, "groups", groupId, "typing");
-      onSnapshot(typingRef, (snapshot) => {
-        let typingUsers = [];
-        snapshot.docs.forEach((docSnap) => {
-          if (docSnap.id !== username) typingUsers.push(docSnap.id);
-        });
-        if (typingUsers.length) {
-          typingLabel().textContent = `${typingUsers.join(", ")} is typing...`;
-        } else {
-          typingLabel().textContent = "";
-        }
-      });
-    }
-
-    // Update typing status in Firestore
-    async function updateTypingStatus(isTypingNow) {
-      if (!currentGroupId || !username) return;
-      const typingDocRef = doc(db, "groups", currentGroupId, "typing", username);
-
-      if (isTypingNow) {
-        await setDoc(typingDocRef, {
-          lastTyped: serverTimestamp(),
-        });
-        if (typingTimeout) clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(() => {
-          updateTypingStatus(false);
-        }, 3000);
-      } else {
-        await deleteDoc(typingDocRef).catch(() => {});
-      }
-    }
-
-    // On message input typing
-    function onInputTyping() {
-      if (!isTyping) {
-        isTyping = true;
-        updateTypingStatus(true);
-      }
-      if (typingTimeout) clearTimeout(typingTimeout);
-      typingTimeout = setTimeout(() => {
-        isTyping = false;
-        updateTypingStatus(false);
-      }, 3000);
-    }
-
-    // Load online users for group (simplified: all users online)
-    async function loadOnlineUsers(groupId) {
-      // We could filter users by group membership, but for demo show all online users
-      const usersRef = collection(db, "users");
-      onSnapshot(usersRef, (snapshot) => {
-        // Could display online users somewhere
-        // For now, just log them
-        const onlineUsers = [];
-        snapshot.docs.forEach((docSnap) => {
-          const user = docSnap.data();
-          if (user.online) onlineUsers.push(user.username);
-        });
-        console.log("Online users:", onlineUsers);
-      });
-    }
-
-    // Check if current user is admin
-    async function checkIfAdmin() {
-      if (!username) return false;
-      const userDocRef = doc(db, "users", username);
-      const userSnap = await getDoc(userDocRef);
-      if (!userSnap.exists()) return false;
-      const user = userSnap.data();
-      return user.isAdmin || false;
-    }
-
-    // Initial load for current group
-    async function initChatForGroup(groupId) {
-      currentGroupId = groupId;
-      messagesList().innerHTML = "";
-      pinnedMsgDiv().textContent = "";
-      listenToMessages(groupId);
-      listenToTyping(groupId);
-      loadPinnedMessage(groupId);
-      loadOnlineUsers(groupId);
-    }
-
-    // On page load, initialize chat if groupId present in URL
-    window.addEventListener("load", () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const groupId = urlParams.get("groupId");
-      if (groupId) {
-        initChatForGroup(groupId);
-      }
-    });
-
+      trigger.addEventListener("click", () => picker.togglePicker(trigger));
+    };
   </script>
-</body>
-</html>Here's a complete single HTML file implementing a Firebase-based **group chat app** with an iMessage-style UI and all the features you requested:
 
-- User sign-up/login (email+password)
-- Multiple groups with create/delete
-- Messages with text, images, emojis
-- Message edit, delete, pin
-- Typing indicators
-- Read receipts (small avatar dots)
-- Reactions with emoji picker & toggle
-- Group avatars
-- Dark/light mode with system sync
-- Responsive iMessage-style UI
-- Real-time updates via Firestore
-- User presence online status (simplified)
-- Mention users by clicking usernames
-- Emojis via emoji-picker-element
-
----
-
-**Important:**
-
-- You must replace the Firebase config placeholders with your own Firebase project config.
-- The code uses Firebase v9 modular SDK + emoji-picker-element from CDN.
-- All UI and logic is in this single HTML file.
-
----
-
-```html
-<!DOCTYPE html>
-<html lang="en" >
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Firebase Group Chat - iMessage Style</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js" />
   <style>
-    /* Reset */
-    * {
-      box-sizing: border-box;
-    }
-    body,html {
-      margin:0; padding:0; height:100%;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
-        Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
-      background-color: var(--bg);
-      color: var(--text);
-      transition: background-color 0.3s, color 0.3s;
-    }
-    :root {
-      --bg: #f0f0f5;
-      --text: #000;
-      --msg-bg-user: #daf1ff;
-      --msg-bg-other: #e5e5ea;
-      --accent: #007aff;
-      --input-bg: #fff;
-      --input-border: #ccc;
-      --secondary-text: #555;
-    }
-    [data-theme="dark"] {
-      --bg: #121212;
-      --text: #e0e0e0;
-      --msg-bg-user: #0b74ff;
-      --msg-bg-other: #2c2c2e;
-      --accent: #0a84ff;
-      --input-bg: #1e1e1e;
-      --input-border: #444;
-      --secondary-text: #aaa;
-    }
-    a {
-      color: var(--accent);
-      text-decoration: none;
-    }
-    a:hover {
-      text-decoration: underline;
-    }
-    button {
-      cursor: pointer;
-      background: none;
-      border: none;
-      color: var(--accent);
-      font-size: 1rem;
-      padding: 0.2em 0.5em;
-      border-radius: 4px;
-      transition: background-color 0.2s ease;
-    }
-    button:hover {
-      background-color: var(--accent);
+    body.dark {
+      background-color: #1a202c;
       color: white;
     }
-    input, textarea {
-      font-family: inherit;
-      font-size: 1rem;
-      padding: 0.5em;
-      border-radius: 8px;
-      border: 1px solid var(--input-border);
-      background: var(--input-bg);
-      color: var(--text);
-      resize: none;
-      width: 100%;
-    }
-    input:focus, textarea:focus {
-      outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 5px var(--accent);
-    }
-    header {
-      background: var(--accent);
-      color: white;
-      padding: 1em;
-      text-align: center;
-      font-weight: 700;
-      font-size: 1.25rem;
-      user-select: none;
-    }
-    main {
-      display: flex;
-      height: calc(100vh - 120px);
-      overflow: hidden;
-      background: var(--bg);
-    }
-    /* Sidebar */
-    #sidebar {
-      width: 280px;
-      border-right: 1px solid var(--input-border);
-      display: flex;
-      flex-direction: column;
-      background: var(--input-bg);
-    }
-    #sidebar h2 {
-      margin: 1em;
-      font-weight: 600;
-      font-size: 1.1rem;
-      border-bottom: 1px solid var(--input-border);
-      padding-bottom: 0.5em;
-    }
-    #groupsList {
-      flex-grow: 1;
-      overflow-y: auto;
-      margin: 0 1em;
-    }
-    .group-item {
-      display: flex;
-      align-items: center;
-      padding: 0.5em 0.75em;
-      border-radius: 10px;
-      cursor: pointer;
-      user-select: none;
-      transition: background-color 0.2s;
-    }
-    .group-item:hover {
-      background-color: var(--msg-bg-other);
-    }
-    .group-item.selected {
-      background-color: var(--accent);
-      color: white;
-    }
-    .group-avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background-color: var(--accent);
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-      font-size: 1.25rem;
-      margin-right: 1em;
-      user-select: none;
-    }
-    .group-name {
-      flex-grow: 1;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    #createGroupBtn {
-      margin: 1em;
-      background-color: var(--accent);
-      color: white;
-      border-radius: 8px;
-      font-weight: 600;
-      border: none;
-      padding: 0.5em;
-    }
-    #createGroupBtn:hover {
-      background-color: #005fcc;
-    }
-    /* Chat Area */
-    #chatArea {
-      flex-grow: 1;
-      display: flex;
-      flex-direction: column;
-      background: var(--bg);
-      position: relative;
-    }
-    #pinnedMessage {
-      background: #fff3cd;
-      color: #856404;
-      padding: 0.5em 1em;
-      border-left: 6px solid #ffeeba;
-      font-style: italic;
-      user-select: none;
-    }
-    [data-theme="dark"] #pinnedMessage {
-      background: #6f5700;
-      color: #ffefb6;
-      border-left-color: #ffdf7f;
-    }
-    #messages {
-      flex-grow: 1;
-      overflow-y: auto;
-      padding: 1em;
-      display: flex;
-      flex-direction: column;
-      gap: 0.6em;
-      scroll-behavior: smooth;
-      user-select: text;
-    }
-    .message {
-      max-width: 65%;
-      padding: 0.7em 1em;
-      border-radius: 18px;
-      position: relative;
-      word-wrap: break-word;
-      white-space: pre-wrap;
-      font-size: 1rem;
-      line-height: 1.3;
-      box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
-      display: flex;
-      flex-direction: column;
-      gap: 0.3em;
-    }
-    .message.self {
-      align-self: flex-end;
-      background-color: var(--msg-bg-user);
+    .dark input,
+    .dark textarea {
       color: black;
-      border-bottom-right-radius: 2px;
-    }
-    .message.other {
-      align-self: flex-start;
-      background-color: var(--msg-bg-other);
-      color: var(--text);
-      border-bottom-left-radius: 2px;
-    }
-    .message-header {
-      display: flex;
-      align-items: center;
-      gap: 0.5em;
-      font-size: 0.85rem;
-      color: var(--secondary-text);
-      cursor: default;
-      user-select: none;
-    }
-    .message-header img.avatar {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      object-fit: cover;
-      flex-shrink: 0;
-    }
-    .message-header .username {
-      font-weight: 600;
-      color: var(--accent);
-      cursor: pointer;
-      user-select: text;
-    }
-    .message-content {
-      white-space: pre-wrap;
-    }
-    .message .edited-label {
-      font-size: 0.7rem;
-      color: var(--secondary-text);
-      font-style: italic;
-      user-select: none;
-    }
-    /* Images in messages */
-    .message-images {
-      margin-top: 0.5em;
-      display: flex;
-      gap: 0.4em;
-      flex-wrap: wrap;
-    }
-    .message-images img {
-      width: 100px;
-      height: 100px;
-      border-radius: 12px;
-      object-fit: cover;
-      cursor: pointer;
-      transition: opacity 0.2s;
-      user-select: none;
-    }
-    .message-images img:hover {
-      opacity: 0.8;
-    }
-    /* Reactions */
-    .reactions-bar {
-      margin-top: 0.4em;
-      display: flex;
-      gap: 0.3em;
-      flex-wrap: wrap;
-    }
-    .reaction-btn {
-      background: var(--msg-bg-other);
-      color: var(--text);
-      border-radius: 12px;
-      padding: 0 6px;
-      display: flex;
-      align-items: center;
-      gap: 3px;
-      font-size: 0.85rem;
-      cursor: pointer;
-      user-select: none;
-      transition: background-color 0.2s;
-      border: 1px solid transparent;
-    }
-    .reaction-btn:hover {
-      background-color: var(--accent);
-      color: white;
-      border-color: var(--accent);
-    }
-    .reaction-btn.self {
-      background-color: var(--accent);
-      color: white;
-      border-color: var(--accent);
-    }
-    /* Add reaction button */
-    .reaction-add-btn {
-      background-color: var(--accent);
-      color: white;
-      font-weight: 700;
-      font-size: 1.1rem;
-      width: 26px;
-      height: 26px;
-      border-radius: 50%;
-      text-align: center;
-      line-height: 23px;
-      cursor: pointer;
-      user-select: none;
-      transition: background-color 0.2s;
-      border: none;
-    }
-    .reaction-add-btn:hover {
-      background-color: #005fcc;
-    }
-    /* Read receipts */
-    .read-by-container {
-      margin-top: 0.4em;
-      display: flex;
-      gap: 3px;
-      justify-content: flex-end;
-    }
-    .read-by-avatar {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 1.5px solid var(--bg);
-    }
-    /* Typing indicator */
-    #typingIndicator {
-      font-style: italic;
-      padding: 0.2em 1em;
-      color: var(--secondary-text);
-      height: 22px;
-      user-select: none;
-    }
-    /* Message input area */
-    #inputArea {
-      display: flex;
-      align-items: center;
-      gap: 0.5em;
-      padding: 0.5em 1em;
-      background: var(--input-bg);
-      border-top: 1px solid var(--input-border);
-    }
-    #messageInput {
-      flex-grow: 1;
-      min-height: 40px;
-      max-height: 100px;
-      overflow-y: auto;
-      border-radius: 18px;
-      border: 1px solid var(--input-border);
-      padding: 0.5em 1em;
-      font-size: 1rem;
-      color: var(--text);
-      background: var(--input-bg);
-      resize: none;
-      outline: none;
-      font-family: inherit;
-    }
-    #sendBtn, #emojiBtn, #attachBtn {
-      background: var(--accent);
-      border: none;
-      color: white;
-      font-weight: 700;
-      border-radius: 50%;
-      width: 38px;
-      height: 38px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background-color 0.3s;
-      user-select: none;
-      cursor: pointer;
-      font-size: 1.2rem;
-    }
-    #sendBtn:hover, #emojiBtn:hover, #attachBtn:hover {
-      background-color: #005fcc;
-    }
-    #emojiPicker {
-      position: absolute;
-      bottom: 60px;
-      right: 70px;
-      z-index: 100;
-      display: none;
-      box-shadow: 0 2px 10px rgb(0 0 0 / 0.3);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    /* Login/Register */
-    #authContainer {
-      height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      background: var(--bg);
-      color: var(--text);
-    }
-    #authBox {
-      background: var(--input-bg);
-      padding: 2em;
-      border-radius: 12px;
-      box-shadow: 0 0 15px rgb(0 0 0 / 0.1);
-      max-width: 360px;
-      width: 100%;
-    }
-    #authBox h2 {
-      margin-top: 0;
-      margin-bottom: 1em;
-      text-align: center;
-    }
-    #authBox input {
-      margin-bottom: 1em;
-    }
-    #authBox button {
-      width: 100%;
-      margin-bottom: 1em;
-      font-weight: 600;
-      background-color: var(--accent);
-      color: white;
-      border-radius: 8px;
-      border: none;
-      padding: 0.75em;
-    }
-    #authBox button:hover {
-      background-color: #005fcc;
-    }
-    #authSwitch {
-      text-align: center;
-      user-select: none;
-      color: var(--accent);
-      cursor: pointer;
-      font-weight: 600;
-    }
-    /* Responsive */
-    @media (max-width: 720px) {
-      main {
-        flex-direction: column;
-      }
-      #sidebar {
-        width: 100%;
-        border-right: none;
-        border-bottom: 1px solid var(--input-border);
-        flex-direction: row;
-        overflow-x: auto;
-        height: 60px;
-      }
-      #groupsList {
-        display: flex;
-        gap: 0.6em;
-        margin: 0 0.5em;
-        flex-grow: 1;
-        overflow-x: auto;
-      }
-      .group-item {
-        flex-shrink: 0;
-        padding: 0.4em 0.7em;
-        border-radius: 30px;
-      }
-      #createGroupBtn {
-        margin: 0 0.5em;
-        height: 36px;
-        font-size: 0.9rem;
-        padding: 0 1em;
-        border-radius: 30px;
-      }
-      #chatArea {
-        height: calc(100vh - 60px - 60px);
-      }
     }
   </style>
 </head>
-<body>
-  <header>Firebase Group Chat</header>
 
-  <div id="authContainer" aria-live="polite">
-    <div id="authBox">
-      <h2 id="authTitle">Login</h2>
-      <input type="email" id="emailInput" placeholder="Email" autocomplete="username" />
-      <input type="password" id="passwordInput" placeholder="Password" autocomplete="current-password" />
-      <button id="authSubmitBtn">Login</button>
-      <div id="authSwitch">Don't have an account? Register</div>
-      <div id="authError" role="alert" style="color:red; min-height:1.2em; margin-top:0.5em;"></div>
-    </div>
+<body class="min-h-screen bg-gray-100 dark:bg-gray-900 text-black dark:text-white flex flex-col items-center p-4">
+  <!-- Login section -->
+  <div id="login-section" class="w-full max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+    <h1 class="text-xl font-bold mb-4">Enter your name</h1>
+    <input id="username-input" type="text" placeholder="Your name" class="w-full border rounded p-2 mb-4 text-black" />
+    <button id="login-btn" class="bg-blue-500 text-white px-4 py-2 rounded w-full">Join Chat</button>
   </div>
 
-  <main style="display:none;">
-    <nav id="sidebar" aria-label="Groups">
-      <h2>Your Groups</h2>
-      <div id="groupsList" role="list"></div>
-      <button id="createGroupBtn" aria-label="Create New Group">+ New Group</button>
-    </nav>
+  <!-- Main chat UI -->
+  <div id="chat-ui" class="hidden w-full max-w-2xl flex flex-col bg-white dark:bg-gray-800 rounded shadow-lg h-[85vh] mt-6">
+    <!-- Groups Page -->
+    <div id="groupsPage" class="flex flex-col h-full">
+      <div class="font-bold text-lg mb-2 flex justify-between items-center px-4 py-2 border-b dark:border-gray-700">
+        Groups
+        <span id="currentUserLabel" class="text-xs italic"></span>
+      </div>
+      <div id="groupsList" class="flex-1 overflow-y-auto p-4"></div>
+      <div class="flex gap-2 p-4 border-t dark:border-gray-700">
+        <input id="newGroupName" type="text" placeholder="New group name" class="flex-1 border rounded p-2 text-black" />
+        <button onclick="createGroup()" class="bg-green-600 text-white px-4 rounded">Create</button>
+      </div>
+    </div>
 
-    <section id="chatArea" aria-live="polite" aria-relevant="additions">
-      <div id="pinnedMessage" aria-label="Pinned message"></div>
-      <div id="messages" role="list" tabindex="0" aria-label="Chat messages"></div>
-      <div id="typingIndicator" aria-live="polite" aria-atomic="true"></div>
-      <form id="inputArea" aria-label="Send message form">
-        <button type="button" id="emojiBtn" aria-label="Open emoji picker">😊</button>
-        <textarea id="messageInput" rows="1" placeholder="Type a message" aria-multiline="true" aria-label="Message input"></textarea>
-        <input type="file" id="imageInput" accept="image/*" multiple style="display:none;" aria-label="Attach images"/>
-        <button type="button" id="attachBtn" aria-label="Attach images">📎</button>
-        <button type="submit" id="sendBtn" aria-label="Send message">➤</button>
-      </form>
-      <emoji-picker id="emojiPicker" aria-label="Emoji picker"></emoji-picker>
-    </section>
-  </main>
-
-  <!-- Firebase SDK -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-    import {
-      getAuth,
-      onAuthStateChanged,
-      createUserWithEmailAndPassword,
-      signInWithEmailAndPassword,
-      signOut,
-      updateProfile
-    } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
-    import {
-      getFirestore,
-      collection,
-      doc,
-      addDoc,
-      getDoc,
-      getDocs,
-      query,
-      where,
-      onSnapshot,
-      updateDoc,
-      deleteDoc,
-      serverTimestamp,
-      orderBy,
-      limit,
-      arrayUnion,
-      arrayRemove,
-      setDoc
-    } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-    import {
-      getStorage,
-      ref,
-      uploadBytes,
-      getDownloadURL
-    } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
-
-    // Firebase config - REPLACE with your own config
-    const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_AUTH_DOMAIN",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_STORAGE_BUCKET",
-      messagingSenderId: "YOUR_MSG_SENDER_ID",
-      appId: "YOUR_APP_ID"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    const storage = getStorage(app);
-
-    // Elements
-    const authContainer = document.getElementById("authContainer");
-    const authBox = document.getElementById("authBox");
-    const authTitle = document.getElementById("authTitle");
-    const emailInput = document.getElementById("emailInput");
-    const passwordInput = document.getElementById("passwordInput");
-    const authSubmitBtn = document.getElementById("authSubmitBtn");
-    const authSwitch = document.getElementById("authSwitch");
-    const authError = document.getElementById("authError");
-
-    const mainApp = document.querySelector("main");
-    const groupsList = document.getElementById("groupsList");
-    const createGroupBtn = document.getElementById("createGroupBtn");
-
-    const chatArea = document.getElementById("chatArea");
-    const pinnedMessageDiv = document.getElementById("pinnedMessage");
-    const messagesDiv = document.getElementById("messages");
-    const typingIndicator = document.getElementById("typingIndicator");
-
-    const inputArea = document.getElementById("inputArea");
-    const messageInput = document.getElementById("messageInput");
-    const sendBtn = document.getElementById("sendBtn");
-    const emojiBtn = document.getElementById("emojiBtn");
-    const emojiPicker = document.getElementById("emojiPicker");
-    const attachBtn = document.getElementById("attachBtn");
-    const imageInput = document.getElementById("imageInput");
-
-    // State
-    let currentUser = null;
-    let currentGroupId = null;
-    let unsubscribeMessages = null;
-    let unsubscribeTyping = null;
-    let typingTimeout = null;
-    let userTyping = false;
-    let onlineUsers = new Set();
-    let usersCache = new Map();
-
-    // Dark mode - sync with system preference
-    function applyTheme(theme) {
-      if(theme === "dark") {
-        document.documentElement.setAttribute("data-theme", "dark");
-      } else {
-        document.documentElement.removeAttribute("data-theme");
-      }
-    }
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    applyTheme(mediaQuery.matches ? "dark" : "light");
-    mediaQuery.addEventListener('change', e => applyTheme(e.matches ? "dark" : "light"));
-
-    // Authentication mode (login/register)
-    let isLoginMode = true;
-    function toggleAuthMode() {
-      isLoginMode = !isLoginMode;
-      authTitle.textContent = isLoginMode ? "Login" : "Register";
-      authSubmitBtn.textContent = isLoginMode ? "Login" : "Register";
-      authSwitch.textContent = isLoginMode ? "Don't have an account? Register" : "Already have an account? Login";
-      authError.textContent = "";
-      emailInput.value = "";
-      passwordInput.value = "";
-    }
-    authSwitch.addEventListener("click", toggleAuthMode);
-
-    // Handle auth submit
-    authSubmitBtn.addEventListener("click", async () => {
-      const email = emailInput.value.trim();
-      const password = passwordInput.value;
-      authError.textContent = "";
-      if (!email || !password) {
-        authError.textContent = "Email and password required.";
-        return;
-      }
-      try {
-        if (isLoginMode) {
-          await signInWithEmailAndPassword(auth, email, password);
-        } else {
-          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-          // Optionally update displayName with part of email before @
-          if (userCredential.user) {
-            await updateProfile(userCredential.user, {displayName: email.split("@")[0]});
-          }
-        }
-      } catch (e) {
-        authError.textContent = e.message;
-      }
-    });
-
-    // Logout function (hidden, can be triggered via console or add UI if needed)
-    window.logout = async () => {
-      await signOut(auth);
-    };
-
-    // On auth state changed
-    onAuthStateChanged(auth, async user => {
-      currentUser = user;
-      if (user) {
-        // Logged in
-        authContainer.style.display = "none";
-        mainApp.style.display = "flex";
-        await loadUserGroups();
-      } else {
-        // Logged out
-        mainApp.style.display = "none";
-        authContainer.style.display = "flex";
-        if (unsubscribeMessages) unsubscribeMessages();
-        if (unsubscribeTyping) unsubscribeTyping();
-        currentGroupId = null;
-        messagesDiv.innerHTML = "";
-        groupsList.innerHTML = "";
-        pinnedMessageDiv.textContent = "";
-      }
-    });
-
-    // Load user groups
-    async function loadUserGroups() {
-      groupsList.innerHTML = "<li>Loading...</li>";
-      // Get groups where currentUser is a member
-      const groupsCol = collection(db, "groups");
-      const q = query(groupsCol, where("members", "array-contains", currentUser.uid));
-      const unsubscribe = onSnapshot(q, snapshot => {
-        groupsList.innerHTML = "";
-        if (snapshot.empty) {
-          groupsList.innerHTML = "<p style='color: var(--secondary-text); margin:1em;'>You are not in any groups. Create one!</p>";
-          currentGroupId = null;
-          messagesDiv.innerHTML = "";
-          pinnedMessageDiv.textContent = "";
-          return;
-        }
-        snapshot.forEach(docSnap => {
-          const group = docSnap.data();
-          const groupId = docSnap.id;
-          const item = document.createElement("div");
-          item.className = "group-item";
-          if (groupId === currentGroupId) item.classList.add("selected");
-          item.setAttribute("role", "listitem");
-          item.tabIndex = 0;
-          // Group avatar - first letter or emoji
-          const avatar = document.createElement("div");
-          avatar.className = "group-avatar";
-          avatar.textContent = group.name.charAt(0).toUpperCase();
-          item.appendChild(avatar);
-          // Group name
-          const nameSpan = document.createElement("span");
-          nameSpan.className = "group-name";
-          nameSpan.textContent = group.name;
-          item.appendChild(nameSpan);
-
-          // Select group on click or enter key
-          item.addEventListener("click", () => selectGroup(groupId));
-          item.addEventListener("keydown", e => {
-            if (e.key === "Enter") {
-              selectGroup(groupId);
-            }
-          });
-
-          groupsList.appendChild(item);
-        });
-
-        // If no group selected, select first group
-        if (!currentGroupId && snapshot.docs.length > 0) {
-          selectGroup(snapshot.docs[0].id);
-        }
-      });
-    }
-
-    // Select group to load messages and info
-    async function selectGroup(groupId) {
-      if (currentGroupId === groupId) return;
-
-      // Unsubscribe previous listeners
-      if (unsubscribeMessages) unsubscribeMessages();
-      if (unsubscribeTyping) unsubscribeTyping();
-
-      currentGroupId = groupId;
-
-      // Highlight selected group in sidebar
-      document.querySelectorAll(".group-item").forEach(item => {
-        if (item.querySelector(".group-name").textContent === "") return;
-        if (item.classList.contains("selected")) item.classList.remove("selected");
-      });
-      const selectedItem = [...document.querySelectorAll(".group-item")].find(item => {
-        return item.textContent === document.querySelector(`.group-item .group-name`).textContent;
-      });
-      // Actually find the right one by groupId
-      [...document.querySelectorAll(".group-item")].forEach(item => {
-        const name = item.querySelector(".group-name").textContent;
-        if (!name) return;
-        if (name === groupsList.querySelector(`[data-groupid="${groupId}"]`)) {
-          item.classList.add("selected");
-        }
-      });
-
-      // More robust approach
-      document.querySelectorAll(".group-item").forEach(item => {
-        item.classList.toggle("selected", item.dataset.groupid === groupId);
-      });
-
-      // Load group data for pinned message
-      const groupDoc = await getDoc(doc(db, "groups", groupId));
-      if (groupDoc.exists()) {
-        const groupData = groupDoc.data();
-        pinnedMessageDiv.textContent = groupData.pinnedMessage || "";
-      } else {
-        pinnedMessageDiv.textContent = "";
-      }
-
-      // Load messages and listen
-      messagesDiv.innerHTML = "<p style='color: var(--secondary-text); margin:1em;'>Loading messages...</p>";
-      const messagesCol = collection(db, "groups", groupId, "messages");
-      const messagesQuery = query(messagesCol, orderBy("createdAt"), limit(100));
-
-      unsubscribeMessages = onSnapshot(messagesQuery, snapshot => {
-        messagesDiv.innerHTML = "";
-        if (snapshot.empty) {
-          messagesDiv.innerHTML = "<p style='color: var(--secondary-text); margin:1em;'>No messages yet.</p>";
-          return;
-        }
-        snapshot.forEach(docSnap => {
-          const msg = docSnap.data();
-          const msgDiv = document.createElement("div");
-          msgDiv.className = "message";
-          if (msg.uid === currentUser.uid) msgDiv.classList.add("own-message");
-
-          // Display username and timestamp
-          const header = document.createElement("div");
-          header.style.fontWeight = "bold";
-          header.style.marginBottom = "0.1em";
-          header.textContent = msg.displayName || "Unknown";
-
-          const timeSpan = document.createElement("span");
-          timeSpan.style.fontWeight = "normal";
-          timeSpan.style.fontSize = "0.75em";
-          timeSpan.style.color = "var(--secondary-text)";
-          timeSpan.style.marginLeft = "0.5em";
-          timeSpan.textContent = msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleTimeString() : "";
-
-          header.appendChild(timeSpan);
-          msgDiv.appendChild(header);
-
-          // Text message
-          if (msg.text) {
-            const textDiv = document.createElement("div");
-            textDiv.textContent = msg.text;
-            msgDiv.appendChild(textDiv);
-          }
-
-          // Images
-          if (msg.images && Array.isArray(msg.images)) {
-            msg.images.forEach(url => {
-              const img = document.createElement("img");
-              img.src = url;
-              img.alt = "Sent image";
-              img.className = "message-image";
-              msgDiv.appendChild(img);
-            });
-          }
-
-          messagesDiv.appendChild(msgDiv);
-        });
-
-        // Scroll to bottom
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-      });
-
-      // Listen for typing indicators
-      listenTyping(groupId);
-    }
-
-    // Listen typing indicator in group
-    function listenTyping(groupId) {
-      if (unsubscribeTyping) unsubscribeTyping();
-
-      const typingDocRef = doc(db, "groups", groupId, "typing", currentUser.uid);
-
-      const typingCol = collection(db, "groups", groupId, "typing");
-
-      unsubscribeTyping = onSnapshot(typingCol, snapshot => {
-        const typingUsers = [];
-        snapshot.forEach(docSnap => {
-          if (docSnap.id !== currentUser.uid && docSnap.data().isTyping) {
-            typingUsers.push(docSnap.id);
-          }
-        });
-        if (typingUsers.length > 0) {
-          typingIndicator.textContent = `${typingUsers.length} user${typingUsers.length > 1 ? 's' : ''} typing...`;
-        } else {
-          typingIndicator.textContent = "";
-        }
-      });
-    }
-
-    // Set typing status
-    function setTyping(isTyping) {
-      if (!currentGroupId || !currentUser) return;
-      const typingDocRef = doc(db, "groups", currentGroupId, "typing", currentUser.uid);
-      updateDoc(typingDocRef, { isTyping }).catch(async () => {
-        // If doc doesn't exist, create it
-        await setDoc(typingDocRef, { isTyping });
-      });
-    }
-
-    // Input event handlers for typing
-    messageInput.addEventListener("input", () => {
-      if (!userTyping) {
-        userTyping = true;
-        setTyping(true);
-      }
-      clearTimeout(typingTimeout);
-      typingTimeout = setTimeout(() => {
-        userTyping = false;
-        setTyping(false);
-      }, 2000);
-    });
-
-    // Send message
-    inputArea.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      if (!currentGroupId) return;
-
-      const text = messageInput.value.trim();
-      if (text === "" && imageInput.files.length === 0) return;
-
-      sendBtn.disabled = true;
-
-      let imageUrls = [];
-      if (imageInput.files.length > 0) {
-        const files = Array.from(imageInput.files);
-        for (const file of files) {
-          const storageRef = ref(storage, `images/${currentGroupId}/${Date.now()}_${file.name}`);
-          try {
-            await uploadBytes(storageRef, file);
-            const url = await getDownloadURL(storageRef);
-            imageUrls.push(url);
-          } catch (err) {
-            console.error("Error uploading image:", err);
-          }
-        }
-      }
-
-      try {
-        const messagesCol = collection(db, "groups", currentGroupId, "messages");
-        await addDoc(messagesCol, {
-          uid: currentUser.uid,
-          displayName: currentUser.displayName || currentUser.email.split("@")[0],
-          text: text || null,
-          images: imageUrls.length > 0 ? imageUrls : null,
-          createdAt: serverTimestamp(),
-        });
-        messageInput.value = "";
-        imageInput.value = "";
-        sendBtn.disabled = false;
-        setTyping(false);
-        userTyping = false;
-      } catch (err) {
-        console.error("Error sending message:", err);
-        sendBtn.disabled = false;
-      }
-    });
-
-    // Emoji picker toggle
-    emojiBtn.addEventListener("click", () => {
-      if (emojiPicker.style.display === "block") {
-        emojiPicker.style.display = "none";
-      } else {
-        emojiPicker.style.display = "block";
-        emojiPicker.focus();
-      }
-    });
-
-    // Insert emoji into message input
-    emojiPicker.addEventListener("emoji-click", event => {
-      const emoji = event.detail.unicode;
-      messageInput.value += emoji;
-      messageInput.focus();
-      emojiPicker.style.display = "none";
-    });
-
-    // Attach images button
-    attachBtn.addEventListener("click", () => {
-      imageInput.click();
-    });
-
-    // Close emoji picker if clicked outside
-    document.addEventListener("click", (e) => {
-      if (!emojiPicker.contains(e.target) && e.target !== emojiBtn) {
-        emojiPicker.style.display = "none";
-      }
-    });
-
-    // Create new group dialog and creation
-    createGroupBtn.addEventListener("click", async () => {
-      const groupName = prompt("Enter new group name:");
-      if (!groupName) return;
-      try {
-        const groupsCol = collection(db, "groups");
-        const groupDocRef = await addDoc(groupsCol, {
-          name: groupName.trim(),
-          members: [currentUser.uid],
-          pinnedMessage: ""
-        });
-        currentGroupId = groupDocRef.id;
-        await selectGroup(currentGroupId);
-        await loadUserGroups();
-      } catch (err) {
-        alert("Error creating group: " + err.message);
-      }
-    });
-  </script>
+    <!-- Chat Page -->
+    <div id="chatPage" class="hidden flex flex-col h-full">
+      <div class="flex items-center justify-between p-4 border-b dark:border-gray-700">
+        <button onclick="backToGroups()" class="text-blue-600 dark:text-blue-400">← Back to groups</button>
+        <h2 id="groupTitle" class="font-bold text-lg"></h2>
+        <div></div>
+      </div>
+      <div id="messages" class="flex-1 overflow-y-auto p-4 flex flex-col gap-1"></div>
+      <div class="p-4 border-t dark:border-gray-700 flex items-center gap-2">
+        <button id="emojiBtn" class="text-xl">😊</button>
+        <input
+          id="messageInput"
+          type="text"
+          placeholder="Type a message"
+          class="flex-1 border rounded p-2 text-black"
+          autocomplete="off"
+        />
+        <input type="file" id="imageInput" accept="image/*" onchange="previewImage(event)" class="hidden" />
+        <button onclick="document.getElementById('imageInput').click()" class="bg-gray-200 dark:bg-gray-700 rounded px-3 py-2">📷</button>
+        <button onclick="sendMessage()" class="bg-blue-600 text-white px-4 py-2 rounded">Send</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
