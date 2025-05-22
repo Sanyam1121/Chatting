@@ -1,154 +1,221 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Firebase Group Chat</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-    .container { max-width: 800px; margin: 0 auto; padding: 1rem; }
-    .auth-section, .chat-section { margin-bottom: 2rem; }
-    .hidden { display: none; }
-    .chat-box { border: 1px solid #ccc; height: 300px; overflow-y: auto; padding: 1rem; background: #f9f9f9; }
-    .message { margin-bottom: 0.5rem; }
-    .dark-mode { background: #1e1e1e; color: white; }
-    .dark-mode .chat-box { background: #333; color: white; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anonymous Firebase Group Chat with Dark Mode & Timestamps</title>
+<style>
+  :root {
+    --bg-light: #f9f9f9;
+    --text-light: #222;
+    --bg-dark: #121212;
+    --text-dark: #eee;
+  }
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0; padding: 1rem;
+    background: var(--bg-light);
+    color: var(--text-light);
+    transition: background 0.3s, color 0.3s;
+  }
+  body.dark {
+    background: var(--bg-dark);
+    color: var(--text-dark);
+  }
+  .container {
+    max-width: 600px;
+    margin: auto;
+  }
+  input, button {
+    padding: 0.5rem;
+    margin: 0.2rem 0;
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 1rem;
+  }
+  #chatBox {
+    border: 1px solid #ccc;
+    height: 300px;
+    overflow-y: auto;
+    padding: 1rem;
+    background: var(--bg-light);
+    margin-bottom: 1rem;
+    transition: background 0.3s;
+  }
+  body.dark #chatBox {
+    background: #222;
+    border-color: #444;
+  }
+  .message {
+    margin-bottom: 0.5rem;
+  }
+  .sender {
+    font-weight: bold;
+  }
+  .timestamp {
+    font-size: 0.8rem;
+    color: gray;
+    margin-left: 0.3rem;
+  }
+  .controls {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .controls > * {
+    flex: 1;
+  }
+  #darkModeToggle {
+    width: auto;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+  }
+</style>
 </head>
 <body>
-  <div class="container">
-    <h2>Firebase Group Chat</h2>
-
-    <button onclick="toggleDarkMode()">Toggle Dark Mode</button>
-
-    <!-- Authentication -->
-    <div class="auth-section">
-      <h3>Login / Register</h3>
-      <input type="email" id="email" placeholder="Email" />
-      <input type="password" id="password" placeholder="Password" />
-      <button onclick="register()">Register</button>
-      <button onclick="login()">Login</button>
-      <button onclick="logout()">Logout</button>
-    </div>
-
-    <!-- Chat UI -->
-    <div class="chat-section hidden" id="chat-section">
-      <h3>Group Chat</h3>
-      <input type="text" id="groupName" placeholder="Group Name" />
-      <button onclick="joinGroup()">Join Group</button>
-
-      <div class="chat-box" id="chatBox"></div>
-      <input type="text" id="messageInput" placeholder="Type your message..." />
-      <button onclick="sendMessage()">Send</button>
-    </div>
+<div class="container">
+  <h2>Anonymous Group Chat</h2>
+  
+  <div class="controls">
+    <input type="text" id="username" placeholder="Enter your name (optional)" maxlength="20" autocomplete="off" />
+    <input type="text" id="groupName" placeholder="Enter group name" autocomplete="off" />
+    <button onclick="joinGroup()">Join Group</button>
   </div>
 
-  <!-- Firebase CDN -->
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <button id="darkModeToggle">Toggle Dark Mode</button>
 
-  <script>
-    // Firebase config
-    const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_PROJECT_ID.appspot.com",
-      messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-      appId: "YOUR_APP_ID"
-    };
+  <div id="chatSection" style="display:none;">
+    <h3>Group: <span id="currentGroup"></span></h3>
+    <div id="chatBox"></div>
+    <input type="text" id="messageInput" placeholder="Type a message..." autocomplete="off" />
+    <button onclick="sendMessage()">Send</button>
+  </div>
+</div>
 
-    // Initialize Firebase
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
 
-    let currentGroup = "";
-    let unsubscribeMessages = null;
+<script>
+  // Replace with your Firebase config
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
 
-    // Auth handlers
-    function register() {
-      const email = document.getElementById('email').value;
-      const password = document.getElementById('password').value;
-      auth.createUserWithEmailAndPassword(email, password)
-        .then(() => alert("Registered successfully!"))
-        .catch(err => alert("Error: " + err.message));
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  let currentGroup = null;
+  let unsubscribe = null;
+
+  // Assign a consistent color to a username (simple hash function)
+  function nameToColor(name) {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
     }
+    const c = (hash & 0x00FFFFFF)
+      .toString(16)
+      .toUpperCase();
+    return "#" + "00000".substring(0, 6 - c.length) + c;
+  }
 
-    function login() {
-      const email = document.getElementById('email').value;
-      const password = document.getElementById('password').value;
-      auth.signInWithEmailAndPassword(email, password)
-        .then(() => {
-          document.getElementById('chat-section').classList.remove('hidden');
-        })
-        .catch(err => alert("Login failed: " + err.message));
+  function formatTimestamp(ts) {
+    if (!ts) return "";
+    const date = ts.toDate ? ts.toDate() : new Date(ts);
+    return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  }
+
+  function joinGroup() {
+    const groupInput = document.getElementById('groupName');
+    const group = groupInput.value.trim();
+    if (!group) {
+      alert("Please enter a group name");
+      return;
     }
+    currentGroup = group;
+    document.getElementById('currentGroup').textContent = currentGroup;
 
-    function logout() {
-      auth.signOut().then(() => {
-        document.getElementById('chat-section').classList.add('hidden');
-        alert("Logged out");
-      });
-    }
+    document.getElementById('chatSection').style.display = 'block';
+    document.getElementById('chatBox').innerHTML = '';
 
-    // Join/Create Group
-    function joinGroup() {
-      const name = document.getElementById('groupName').value.trim();
-      if (!name) return alert("Enter a group name");
+    if (unsubscribe) unsubscribe();
 
-      currentGroup = name;
-      const groupRef = db.collection("groups").doc(currentGroup);
+    unsubscribe = db.collection('groups').doc(currentGroup).collection('messages')
+      .orderBy('timestamp')
+      .onSnapshot(snapshot => {
+        const chatBox = document.getElementById('chatBox');
+        chatBox.innerHTML = '';
+        snapshot.forEach(doc => {
+          const msg = doc.data();
+          const div = document.createElement('div');
+          div.className = 'message';
 
-      groupRef.set({ createdAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+          const senderName = msg.sender || "Anonymous";
+          const color = nameToColor(senderName);
 
-      if (unsubscribeMessages) unsubscribeMessages();
+          const senderSpan = document.createElement('span');
+          senderSpan.textContent = senderName;
+          senderSpan.className = 'sender';
+          senderSpan.style.color = color;
 
-      unsubscribeMessages = groupRef.collection("messages")
-        .orderBy("timestamp")
-        .onSnapshot(snapshot => {
-          const chatBox = document.getElementById("chatBox");
-          chatBox.innerHTML = "";
-          snapshot.forEach(doc => {
-            const msg = doc.data();
-            const div = document.createElement("div");
-            div.classList.add("message");
-            div.textContent = `${msg.sender}: ${msg.text}`;
-            chatBox.appendChild(div);
-          });
-          chatBox.scrollTop = chatBox.scrollHeight;
+          const timestampSpan = document.createElement('span');
+          timestampSpan.className = 'timestamp';
+          timestampSpan.textContent = formatTimestamp(msg.timestamp);
+
+          div.appendChild(senderSpan);
+          div.appendChild(timestampSpan);
+          div.appendChild(document.createTextNode(": " + msg.text));
+
+          chatBox.appendChild(div);
         });
-    }
-
-    // Send message
-    function sendMessage() {
-      const text = document.getElementById('messageInput').value.trim();
-      if (!text || !currentGroup) return;
-
-      const groupRef = db.collection("groups").doc(currentGroup);
-      groupRef.collection("messages").add({
-        text: text,
-        sender: auth.currentUser.email,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        chatBox.scrollTop = chatBox.scrollHeight;
       });
+  }
 
-      document.getElementById('messageInput').value = '';
-    }
+  function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const text = input.value.trim();
+    if (!text || !currentGroup) return;
 
-    // Dark mode toggle
-    function toggleDarkMode() {
-      document.body.classList.toggle("dark-mode");
-    }
+    let senderName = document.getElementById('username').value.trim();
+    if (!senderName) senderName = "Anonymous";
 
-    // Keep user logged in
-    auth.onAuthStateChanged(user => {
-      if (user) {
-        document.getElementById('chat-section').classList.remove('hidden');
-      } else {
-        document.getElementById('chat-section').classList.add('hidden');
-      }
+    db.collection('groups').doc(currentGroup).collection('messages').add({
+      text: text,
+      sender: senderName,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
     });
-  </script>
+
+    input.value = '';
+  }
+
+  // Dark mode toggle with save in localStorage
+  const darkToggle = document.getElementById('darkModeToggle');
+  function setDarkMode(enabled) {
+    if (enabled) {
+      document.body.classList.add('dark');
+      localStorage.setItem('darkMode', 'true');
+    } else {
+      document.body.classList.remove('dark');
+      localStorage.setItem('darkMode', 'false');
+    }
+  }
+  darkToggle.addEventListener('click', () => {
+    const isDark = document.body.classList.contains('dark');
+    setDarkMode(!isDark);
+  });
+  // On load, set saved mode
+  window.onload = () => {
+    if (localStorage.getItem('darkMode') === 'true') {
+      setDarkMode(true);
+    }
+  };
+</script>
 </body>
 </html>
