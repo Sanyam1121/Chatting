@@ -1,35 +1,40 @@
 <!DOCTYPE html>
-<html lang="en" >
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Firebase Phone Login Group Chat</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.min.js"></script>
-
+  <title>Group Chat with Google Login</title>
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    // Firebase imports
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import {
+      getAuth,
+      signInWithPopup,
+      GoogleAuthProvider,
+      signOut,
+      onAuthStateChanged,
+    } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
     import {
       getFirestore,
       collection,
       addDoc,
-      onSnapshot,
       query,
-      orderBy,
+      where,
+      onSnapshot,
       serverTimestamp,
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+      orderBy,
+      doc,
+      setDoc,
+      getDoc,
+    } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
     import {
       getStorage,
       ref,
       uploadBytes,
       getDownloadURL,
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
-    import {
-      getAuth,
-      RecaptchaVerifier,
-      signInWithPhoneNumber,
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-storage.js";
 
+    // Your Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
       authDomain: "chatting-fd641.firebaseapp.com",
@@ -37,359 +42,265 @@
       storageBucket: "chatting-fd641.appspot.com",
       messagingSenderId: "535384451291",
       appId: "1:535384451291:web:828f60686d81be018b44fe",
-      measurementId: "G-RKS4CFZPJ4",
+      measurementId: "G-RKS4CFZPJ4"
     };
 
+    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
     const db = getFirestore(app);
     const storage = getStorage(app);
-    const auth = getAuth(app);
 
-    let selectedImage = null;
+    // UI elements
+    const loginPage = document.getElementById("loginPage");
+    const groupsPage = document.getElementById("groupsPage");
+    const chatPage = document.getElementById("chatPage");
+    const userLabel = document.getElementById("userLabel");
+    const groupsList = document.getElementById("groupsList");
+    const groupTitle = document.getElementById("groupTitle");
+    const messagesDiv = document.getElementById("messages");
+    const messageInput = document.getElementById("messageInput");
+    const imageInput = document.getElementById("imageInput");
+
     let currentGroupId = null;
-    let confirmationResult = null;
+    let unsubscribeMessages = null;
 
-    // UI elements shortcuts
-    const loginPhonePage = () => document.getElementById("loginPhonePage");
-    const loginCodePage = () => document.getElementById("loginCodePage");
-    const groupsPage = () => document.getElementById("groupsPage");
-    const chatPage = () => document.getElementById("chatPage");
-    const groupsList = () => document.getElementById("groupsList");
-    const messagesList = () => document.getElementById("messages");
-    const currentUserLabel = () => document.getElementById("currentUserLabel");
-    const groupTitle = () => document.getElementById("groupTitle");
-    const userPhoneLabel = () => document.getElementById("userPhoneLabel");
-
-    function showOnly(...pages) {
-      // Hide all, then show given pages
-      [
-        loginPhonePage(),
-        loginCodePage(),
-        groupsPage(),
-        chatPage(),
-      ].forEach((p) => p.classList.add("hidden"));
-      pages.forEach((p) => p.classList.remove("hidden"));
+    // Show only one page at a time
+    function showPage(page) {
+      loginPage.classList.add("hidden");
+      groupsPage.classList.add("hidden");
+      chatPage.classList.add("hidden");
+      page.classList.remove("hidden");
     }
 
-    function setupRecaptcha() {
-      window.recaptchaVerifier = new RecaptchaVerifier(
-        "recaptcha-container",
-        {
-          size: "invisible",
-          callback: (response) => {
-            // reCAPTCHA solved, allow signInWithPhoneNumber.
-            //console.log("reCAPTCHA solved");
-          },
-          "expired-callback": () => {
-            alert("reCAPTCHA expired, please try again.");
-          },
-        },
-        auth
-      );
-      window.recaptchaVerifier.render();
-    }
-
-    async function sendVerificationCode() {
-      const phoneInput = document.getElementById("phoneInput");
-      const phoneNumber = phoneInput.value.trim();
-      if (!phoneNumber) return alert("Enter phone number with country code, e.g. +1234567890");
+    // Google login handler
+    async function loginWithGoogle() {
+      const provider = new GoogleAuthProvider();
       try {
-        setupRecaptcha();
-        confirmationResult = await signInWithPhoneNumber(
-          auth,
-          phoneNumber,
-          window.recaptchaVerifier
-        );
-        showOnly(loginCodePage());
+        await signInWithPopup(auth, provider);
       } catch (error) {
-        alert("Error sending SMS: " + error.message);
+        alert("Login failed: " + error.message);
       }
     }
 
-    async function verifyCode() {
-      const codeInput = document.getElementById("codeInput");
-      const code = codeInput.value.trim();
-      if (!code) return alert("Enter verification code");
-      try {
-        const result = await confirmationResult.confirm(code);
-        // User signed in successfully.
-        const user = result.user;
-        userPhoneLabel().textContent = `Logged in as: ${user.phoneNumber}`;
-        showOnly(groupsPage());
-        loadGroups();
-      } catch (error) {
-        alert("Incorrect code or expired. Try again.");
-      }
+    // Logout
+    async function logout() {
+      if (unsubscribeMessages) unsubscribeMessages();
+      await signOut(auth);
     }
 
-    async function loadGroups() {
-      groupsList().innerHTML = "Loading groups...";
+    // Load groups list
+    function loadGroups() {
       const groupsRef = collection(db, "groups");
       onSnapshot(groupsRef, (snapshot) => {
-        groupsList().innerHTML = "";
-        if (snapshot.empty) {
-          groupsList().innerHTML = "<p class='text-gray-500'>No groups yet. Create one!</p>";
-          return;
-        }
-        snapshot.forEach((doc) => {
-          const group = doc.data();
+        groupsList.innerHTML = "";
+        snapshot.forEach((docSnap) => {
+          const group = docSnap.data();
+          const groupId = docSnap.id;
           const div = document.createElement("div");
-          div.className =
-            "p-3 border rounded cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-600";
           div.textContent = group.name;
-          div.onclick = () => enterGroup(doc.id, group.name);
-          groupsList().appendChild(div);
+          div.className = "cursor-pointer p-2 border rounded hover:bg-gray-200 dark:hover:bg-gray-700";
+          div.onclick = () => openGroupChat(groupId, group.name);
+          groupsList.appendChild(div);
         });
       });
     }
 
+    // Create group
     async function createGroup() {
       const groupNameInput = document.getElementById("newGroupName");
       const name = groupNameInput.value.trim();
-      if (!name) return alert("Enter a group name");
-      await addDoc(collection(db, "groups"), {
-        name,
-        createdAt: serverTimestamp(),
-      });
-      groupNameInput.value = "";
+      if (!name) return alert("Enter group name");
+      try {
+        await addDoc(collection(db, "groups"), {
+          name,
+          createdAt: serverTimestamp(),
+        });
+        groupNameInput.value = "";
+      } catch (e) {
+        alert("Failed to create group: " + e.message);
+      }
     }
 
-    async function enterGroup(groupId, groupName) {
+    // Open group chat
+    function openGroupChat(groupId, groupName) {
       currentGroupId = groupId;
-      groupTitle().textContent = groupName;
-      showOnly(chatPage());
-      listenToMessages(groupId);
+      groupTitle.textContent = groupName;
+      showPage(chatPage);
+      messagesDiv.innerHTML = "";
+      if (unsubscribeMessages) unsubscribeMessages();
+      const messagesRef = collection(db, "groups", groupId, "messages");
+      const q = query(messagesRef, orderBy("createdAt"));
+      unsubscribeMessages = onSnapshot(q, (snapshot) => {
+        messagesDiv.innerHTML = "";
+        snapshot.forEach((docSnap) => {
+          const msg = docSnap.data();
+          const div = document.createElement("div");
+          div.className = msg.uid === auth.currentUser.uid ? "self-message" : "other-message";
+          if(msg.text) {
+            div.textContent = msg.text;
+          }
+          if(msg.imageUrl) {
+            const img = document.createElement("img");
+            img.src = msg.imageUrl;
+            img.style.maxWidth = "200px";
+            img.style.display = "block";
+            div.appendChild(img);
+          }
+          messagesDiv.appendChild(div);
+        });
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      });
     }
 
+    // Send message
     async function sendMessage() {
-      if (!currentGroupId) return alert("No group selected");
-      const text = document.getElementById("messageInput").value.trim();
-      if (!text && !selectedImage) return;
-      let imageUrl = null;
+      if (!currentGroupId) return alert("Select a group first");
+      const text = messageInput.value.trim();
+      const file = imageInput.files[0];
 
-      if (selectedImage) {
-        const storageRef = ref(
-          storage,
-          "images/" + Date.now() + "-" + selectedImage.name
-        );
-        await uploadBytes(storageRef, selectedImage);
+      if (!text && !file) return;
+
+      let imageUrl = null;
+      if (file) {
+        // Upload image
+        const storageRef = ref(storage, `images/${currentGroupId}/${Date.now()}_${file.name}`);
+        await uploadBytes(storageRef, file);
         imageUrl = await getDownloadURL(storageRef);
-        selectedImage = null;
       }
 
-      await addDoc(collection(db, "groups", currentGroupId, "messages"), {
-        username: auth.currentUser.phoneNumber,
-        text: text || null,
-        imageUrl: imageUrl || null,
-        timestamp: new Date(),
-      });
-
-      document.getElementById("messageInput").value = "";
-      document.getElementById("imageInput").value = "";
-    }
-
-    function listenToMessages(groupId) {
-      const messagesRef = collection(db, "groups", groupId, "messages");
-      const q = query(messagesRef, orderBy("timestamp", "asc"));
-      onSnapshot(q, (snapshot) => {
-        messagesList().innerHTML = "";
-        snapshot.forEach((doc) => {
-          const msg = doc.data();
-          const div = document.createElement("div");
-          div.className =
-            "p-2 rounded-lg max-w-[70%] mb-2 " +
-            (msg.username === auth.currentUser.phoneNumber
-              ? "bg-blue-500 text-white self-end"
-              : "bg-gray-200 text-black self-start dark:bg-gray-700 dark:text-white");
-          div.innerHTML = `
-            <div class="text-xs mb-1 opacity-70">${msg.username}</div>
-            ${msg.text ? `<div>${msg.text}</div>` : ""}
-            ${
-              msg.imageUrl
-                ? `<img src="${msg.imageUrl}" class="mt-2 rounded shadow max-w-[200px]"/>`
-                : ""
-            }
-          `;
-          messagesList().appendChild(div);
+      try {
+        await addDoc(collection(db, "groups", currentGroupId, "messages"), {
+          uid: auth.currentUser.uid,
+          displayName: auth.currentUser.displayName,
+          text: text || null,
+          imageUrl,
+          createdAt: serverTimestamp(),
         });
-        messagesList().scrollTop = messagesList().scrollHeight;
-      });
+        messageInput.value = "";
+        imageInput.value = "";
+      } catch (e) {
+        alert("Failed to send message: " + e.message);
+      }
     }
 
-    function previewImage(event) {
-      selectedImage = event.target.files[0];
-    }
+    // On auth state changed
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        userLabel.textContent = `Hello, ${user.displayName}`;
+        showPage(groupsPage);
+        loadGroups();
+      } else {
+        userLabel.textContent = "";
+        showPage(loginPage);
+        if (unsubscribeMessages) {
+          unsubscribeMessages();
+          unsubscribeMessages = null;
+        }
+      }
+    });
 
-    function toggleDarkMode() {
-      document.body.classList.toggle("dark");
-    }
-
-    function backToGroups() {
-      currentGroupId = null;
-      showOnly(groupsPage());
-    }
-
-    window.sendVerificationCode = sendVerificationCode;
-    window.verifyCode = verifyCode;
+    // Expose functions globally for buttons
+    window.loginWithGoogle = loginWithGoogle;
+    window.logout = logout;
     window.createGroup = createGroup;
-    window.enterGroup = enterGroup;
     window.sendMessage = sendMessage;
-    window.previewImage = previewImage;
-    window.toggleDarkMode = toggleDarkMode;
-    window.backToGroups = backToGroups;
-
-    window.onload = () => {
-      showOnly(loginPhonePage());
-      const picker = new EmojiButton();
-      const trigger = document.querySelector("#emojiBtn");
-      picker.on("emoji", (emoji) => {
-        document.getElementById("messageInput").value += emoji;
-      });
-      trigger.addEventListener("click", () => picker.togglePicker(trigger));
-    };
   </script>
-
   <style>
-    body.dark {
-      background-color: #1a202c;
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 1rem;
+      background-color: #121212;
       color: white;
     }
-    .dark input,
-    .dark textarea {
-      color: black;
+    .hidden { display: none; }
+    #loginPage, #groupsPage, #chatPage {
+      max-width: 480px;
+      margin: auto;
+      background: #1e1e1e;
+      padding: 1rem;
+      border-radius: 8px;
+    }
+    button {
+      cursor: pointer;
+      background: #4285f4;
+      border: none;
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+    }
+    input[type=text], input[type=file] {
+      width: 100%;
+      padding: 0.5rem;
+      border-radius: 4px;
+      border: none;
+      margin-bottom: 0.5rem;
+    }
+    .self-message {
+      background-color: #3a86ff;
+      color: white;
+      align-self: flex-end;
+      padding: 6px 10px;
+      border-radius: 10px;
+      margin: 3px 0;
+      max-width: 80%;
+      word-wrap: break-word;
+    }
+    .other-message {
+      background-color: #888;
+      color: white;
+      align-self: flex-start;
+      padding: 6px 10px;
+      border-radius: 10px;
+      margin: 3px 0;
+      max-width: 80%;
+      word-wrap: break-word;
+    }
+    #messages {
+      display: flex;
+      flex-direction: column;
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid #444;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      background: #222;
+      border-radius: 8px;
     }
   </style>
 </head>
-
-<body
-  class="min-h-screen bg-gray-100 dark:bg-gray-900 text-black dark:text-white flex flex-col items-center p-4"
->
-  <button
-    onclick="toggleDarkMode()"
-    class="absolute top-4 right-4 px-3 py-1 bg-gray-700 text-white rounded text-sm"
-  >
-    Toggle Dark Mode
-  </button>
-
-  <!-- Phone Number Login Page -->
-  <div
-    id="loginPhonePage"
-    class="w-full max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow p-6"
-  >
-    <h1 class="text-xl font-bold mb-4">Sign in with Phone</h1>
-    <input
-      id="phoneInput"
-      type="tel"
-      placeholder="Phone number e.g. +1234567890"
-      class="w-full border rounded p-2 mb-4 text-black"
-    />
-    <div id="recaptcha-container"></div>
-    <button
-      onclick="sendVerificationCode()"
-      class="bg-blue-500 text-white px-4 py-2 rounded w-full"
-    >
-      Send Verification Code
-    </button>
-  </div>
-
-  <!-- Verification Code Page -->
-  <div
-    id="loginCodePage"
-    class="hidden w-full max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow p-6"
-  >
-    <h1 class="text-xl font-bold mb-4">Enter Verification Code</h1>
-    <input
-      id="codeInput"
-      type="text"
-      placeholder="SMS code"
-      class="w-full border rounded p-2 mb-4 text-black"
-    />
-    <button
-      onclick="verifyCode()"
-      class="bg-green-600 text-white px-4 py-2 rounded w-full"
-    >
-      Verify Code
-    </button>
+<body>
+  <!-- Login Page -->
+  <div id="loginPage">
+    <h2>Login with Google</h2>
+    <button onclick="loginWithGoogle()">Sign in with Google</button>
   </div>
 
   <!-- Groups Page -->
-  <div
-    id="groupsPage"
-    class="hidden w-full max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col"
-  >
-    <div class="mb-2 flex justify-between items-center">
-      <h2 class="text-xl font-semibold">Groups</h2>
-      <span id="userPhoneLabel" class="text-sm opacity-70"></span>
+  <div id="groupsPage" class="hidden">
+    <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <span id="userLabel"></span>
+      <button onclick="logout()">Logout</button>
     </div>
-    <div class="flex gap-2 mb-4">
-      <input
-        id="newGroupName"
-        type="text"
-        placeholder="New group name"
-        class="flex-grow border rounded p-2 text-black"
-      />
-      <button
-        onclick="createGroup()"
-        class="bg-blue-500 text-white px-4 rounded"
-      >
-        Create
-      </button>
+    <h2>Groups</h2>
+    <div style="margin-bottom: 1rem;">
+      <input type="text" id="newGroupName" placeholder="New group name" />
+      <button onclick="createGroup()">Create</button>
     </div>
-    <div id="groupsList" class="flex flex-col gap-2 overflow-y-auto max-h-96"></div>
+    <div id="groupsList"></div>
   </div>
 
   <!-- Chat Page -->
-  <div
-    id="chatPage"
-    class="hidden w-full max-w-md flex flex-col bg-white dark:bg-gray-800 rounded-lg shadow p-4"
-  >
-    <div class="flex justify-between items-center mb-3">
-      <button
-        onclick="backToGroups()"
-        class="text-blue-600 dark:text-blue-400 font-semibold"
-      >
-        ← Back
-      </button>
-      <h2 id="groupTitle" class="text-lg font-semibold"></h2>
+  <div id="chatPage" class="hidden" style="display:flex; flex-direction: column;">
+    <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <button onclick="showPage(groupsPage)">← Back to Groups</button>
+      <h3 id="groupTitle"></h3>
       <div></div>
     </div>
-
-    <div
-      id="messages"
-      class="flex flex-col gap-2 overflow-y-auto max-h-96 border rounded p-2 bg-gray-50 dark:bg-gray-900"
-      style="min-height: 300px;"
-    ></div>
-
-    <div class="flex gap-2 mt-4">
-      <input
-        id="messageInput"
-        type="text"
-        placeholder="Type a message..."
-        class="flex-grow border rounded p-2 text-black"
-      />
-      <button
-        id="emojiBtn"
-        class="bg-gray-300 dark:bg-gray-600 rounded px-2"
-        title="Emoji"
-      >
-        😊
-      </button>
-    </div>
-    <div class="flex gap-2 mt-2 items-center">
-      <input
-        id="imageInput"
-        type="file"
-        accept="image/*"
-        onchange="previewImage(event)"
-        class="text-xs text-gray-600 dark:text-gray-300"
-      />
-      <button
-        onclick="sendMessage()"
-        class="bg-blue-600 text-white px-4 py-2 rounded"
-      >
-        Send
-      </button>
-    </div>
+    <div id="messages"></div>
+    <input type="text" id="messageInput" placeholder="Type a message..." />
+    <input type="file" id="imageInput" accept="image/*" />
+    <button onclick="sendMessage()">Send</button>
   </div>
 </body>
 </html>
