@@ -310,3 +310,86 @@
     >
       Verify Code
     </button>
+  </div>
+
+  <!-- Groups Page -->
+  <div
+    id="groupsPage"
+    class="hidden w-full max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col"
+  >
+    <div class="mb-2 flex justify-between items-center">
+      <h2 class="text-xl font-semibold">Groups</h2>
+      <span id="userPhoneLabel" class="text-sm opacity-70"></span>
+    </div>
+    <div class="flex gap-2 mb-4">
+      <input
+        id="newGroupName"
+        type="text"
+        placeholder="New group name"
+        class="flex-grow border rounded p-2 text-black"
+      />
+      <button
+        onclick="createGroup()"
+        class="bg-blue-500 text-white px-4 rounded"
+      >
+        Create
+      </button>
+    </div>
+    <div id="groupsList" class="flex flex-col gap-2 overflow-y-auto max-h-96"></div>
+  </div>
+
+  <!-- Chat Page -->
+  <div
+    id="chatPage"
+    class="hidden w-full max-w-md flex flex-col bg-white dark:bg-gray-800 rounded-lg shadow p-4"
+  >
+    <div class="flex justify-between items-center mb-3">
+      <button
+        onclick="backToGroups()"
+        class="text-blue-600 dark:text-blue-400 font-semibold"
+      >
+        ← Back
+      </button>
+      <h2 id="groupTitle" class="text-lg font-semibold"></h2>
+      <div></div>
+    </div>
+
+    <div
+      id="messages"
+      class="flex flex-col gap-2 overflow-y-auto max-h-96 border rounded p-2 bg-gray-50 dark:bg-gray-900"
+      style="min-height: 300px;"
+    ></div>
+
+    <div class="flex gap-2 mt-4">
+      <input
+        id="messageInput"
+        type="text"
+        placeholder="Type a message..."
+        class="flex-grow border rounded p-2 text-black"
+      />
+      <button
+        id="emojiBtn"
+        class="bg-gray-300 dark:bg-gray-600 rounded px-2"
+        title="Emoji"
+      >
+        😊
+      </button>
+    </div>
+    <div class="flex gap-2 mt-2 items-center">
+      <input
+        id="imageInput"
+        type="file"
+        accept="image/*"
+        onchange="previewImage(event)"
+        class="text-xs text-gray-600 dark:text-gray-300"
+      />
+      <button
+        onclick="sendMessage()"
+        class="bg-blue-600 text-white px-4 py-2 rounded"
+      >
+        Send
+      </button>
+    </div>
+  </div>
+</body>
+</html>
