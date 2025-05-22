@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>iMessage Chat</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="login" class="screen">
+    <h2>Enter Chat</h2>
+    <input id="username" placeholder="Enter your name" />
+    <input type="file" id="pfp-upload" accept="image/*" />
+    <img id="pfp-preview" src="" alt="Preview" />
+    <button id="start-btn">Start Chat</button>
+  </div>
+
+  <div id="chat" class="screen hidden">
+    <div class="chat-header">
+      <img id="pfp-display" class="header-pfp" />
+      <span id="user-display"></span>
+    </div>
+    <ul id="messages"></ul>
+    <p id="typing"></p>
+    <form id="form">
+      <input id="input" autocomplete="off" placeholder="Type a message..." />
+      <button>Send</button>
+    </form>
+  </div>
+
+  <audio id="msg-sound" src="msg-sound.mp3" preload="auto"></audio>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
