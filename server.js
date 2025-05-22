@@ -3,31 +3,44 @@ const app = express();
 const http = require("http").createServer(app);
 const io = require("socket.io")(http);
 
+const PORT = process.env.PORT || 3000;
+
 app.use(express.static("public"));
 
-let users = [];
+let users = {};
 
-io.on("connection", socket => {
+io.on("connection", (socket) => {
+  console.log("a user connected: " + socket.id);
+
   socket.on("join", ({ username, pfp }) => {
-    if (users.length >= 2) return;
-    users.push({ id: socket.id, username, pfp });
-    socket.broadcast.emit("user-joined", { username, pfp });
+    users[socket.id] = { username, pfp };
+    console.log(username + " joined.");
+    io.emit("userList", Object.values(users));
   });
 
-  socket.on("message", data => {
-    socket.broadcast.emit("message", data);
+  socket.on("chat message", (msg) => {
+    // Broadcast message to all except sender
+    socket.broadcast.emit("chat message", {
+      msg,
+      username: users[socket.id]?.username || "Unknown",
+      pfp: users[socket.id]?.pfp || "",
+    });
   });
 
-  socket.on("typing", data => {
-    socket.broadcast.emit("typing", data);
+  socket.on("typing", (isTyping) => {
+    socket.broadcast.emit("typing", {
+      username: users[socket.id]?.username || "",
+      isTyping,
+    });
   });
 
   socket.on("disconnect", () => {
-    users = users.filter(u => u.id !== socket.id);
-    socket.broadcast.emit("user-left");
+    console.log("user disconnected: " + socket.id);
+    delete users[socket.id];
+    io.emit("userList", Object.values(users));
   });
 });
 
-http.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+http.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
 });
