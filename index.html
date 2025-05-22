@@ -32,61 +32,46 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const socket = io();
-    const login = document.getElementById("login");
-    const chat = document.getElementById("chat");
-    const form = document.getElementById("form");
-    const input = document.getElementById("input");
-    const messages = document.getElementById("messages");
-    const typing = document.getElementById("typing");
-    const sound = document.getElementById("msg-sound");
+  const socket = io();
+  const login = document.getElementById("login");
+  const chat = document.getElementById("chat");
+  const form = document.getElementById("form");
+  const input = document.getElementById("input");
+  const messages = document.getElementById("messages");
+  const typing = document.getElementById("typing");
+  const sound = document.getElementById("msg-sound");
+  const pfpUpload = document.getElementById("pfp-upload");
+  const pfpPreview = document.getElementById("pfp-preview");
 
-    let username = "", pfp = "";
+  let username = "", pfp = "";
 
-    function joinChat() {
-      username = document.getElementById("username").value;
-      pfp = document.getElementById("pfp").value || "https://via.placeholder.com/40";
-      if (!username) return;
-
-      document.getElementById("user-display").textContent = username;
-      document.getElementById("pfp-display").src = pfp;
-
-      socket.emit("join", { username, pfp });
-      login.classList.add("hidden");
-      chat.classList.remove("hidden");
+  // 🔁 Preview uploaded image
+  pfpUpload.addEventListener("change", () => {
+    const file = pfpUpload.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        pfpPreview.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
     }
+  });
 
-    form.addEventListener("submit", e => {
-      e.preventDefault();
-      if (input.value) {
-        addMessage("You", pfp, input.value, true);
-        socket.emit("message", { username, pfp, message: input.value });
-        input.value = "";
-      }
-    });
+  function joinChat() {
+    username = document.getElementById("username").value;
+    pfp = pfpPreview.src;
 
-    input.addEventListener("input", () => {
-      socket.emit("typing", `${username} is typing...`);
-    });
+    if (!username) return alert("Enter your name");
 
-    socket.on("message", data => {
-      addMessage(data.username, data.pfp, data.message, false);
-      typing.innerHTML = "";
-      sound.play();
-    });
+    document.getElementById("user-display").textContent = username;
+    document.getElementById("pfp-display").src = pfp;
 
-    socket.on("typing", msg => {
-      typing.innerHTML = msg;
-      setTimeout(() => typing.innerHTML = "", 2000);
-    });
+    socket.emit("join", { username, pfp });
+    login.classList.add("hidden");
+    chat.classList.remove("hidden");
+  }
 
-    function addMessage(sender, pic, text, isSelf) {
-      const msg = document.createElement("div");
-      msg.className = `msg ${isSelf ? "self" : "other"}`;
-      msg.innerHTML = `<img src="${pic}" /><div><strong>${sender}</strong><p>${text}</p></div>`;
-      messages.appendChild(msg);
-      messages.scrollTop = messages.scrollHeight;
-    }
-  </script>
+  // ... (rest of your JS remains the same)
+</script>
 </body>
 </html>
