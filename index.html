@@ -1,115 +1,290 @@
 <!DOCTYPE html>
-<html lang="en" >
+<html lang="en" class="dark">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Only For Her - WhatsApp Style Chat</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.min.js"></script>
-  <style>
-    ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
-    }
-    ::-webkit-scrollbar-thumb {
-      background-color: rgba(100, 116, 139, 0.5);
-      border-radius: 4px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background-color: rgba(100, 116, 139, 0.8);
-    }
-    /* For voice record button animation */
-    .recording {
-      animation: pulse 1s infinite alternate;
-    }
-    @keyframes pulse {
-      0% { box-shadow: 0 0 6px #dc2626; }
-      100% { box-shadow: 0 0 16px #b91c1c; }
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WhatsApp Style Chat</title>
+
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Emoji Button -->
+<script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.min.js"></script>
+
+<style>
+  /* WhatsApp style custom tweaks */
+  body {
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    background: #ece5dd;
+    height: 100vh;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .app-container {
+    width: 100vw;
+    height: 100vh;
+    max-width: 1100px;
+    max-height: 700px;
+    background: white;
+    display: flex;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  /* Sidebar (groups list) */
+  #groupsPage {
+    width: 320px;
+    background: #ffffff;
+    border-right: 1px solid #ddd;
+    display: flex;
+    flex-direction: column;
+  }
+  #groupsPage header {
+    font-weight: 600;
+    font-size: 1.2rem;
+    padding: 15px 20px;
+    border-bottom: 1px solid #ddd;
+    background: #f6f6f6;
+  }
+  #groupsList {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 10px 15px;
+  }
+  #groupsList div {
+    padding: 12px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background-color 0.15s ease;
+  }
+  #groupsList div:hover {
+    background: #f2f2f2;
+  }
+  #groupsList div.selected {
+    background: #dcf8c6;
+  }
+  #groupsList button {
+    background: transparent;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  #newGroupForm {
+    padding: 10px 15px;
+    border-top: 1px solid #ddd;
+    display: flex;
+  }
+  #newGroupName {
+    flex-grow: 1;
+    padding: 8px 12px;
+    border-radius: 20px;
+    border: 1px solid #ccc;
+    outline: none;
+  }
+  #newGroupName:focus {
+    border-color: #25d366;
+  }
+  #createGroupBtn {
+    margin-left: 8px;
+    background: #25d366;
+    border: none;
+    color: white;
+    padding: 8px 15px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  /* Chat Page */
+  #chatPage {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    background: #ece5dd;
+  }
+  #chatHeader {
+    background: #075e54;
+    color: white;
+    padding: 15px 20px;
+    font-weight: 600;
+    font-size: 1.1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  #chatHeader button {
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    cursor: pointer;
+  }
+  #messages {
+    flex-grow: 1;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Message bubbles */
+  .message {
+    max-width: 60%;
+    margin-bottom: 12px;
+    padding: 10px 15px;
+    border-radius: 7.5px;
+    font-size: 0.9rem;
+    line-height: 1.3;
+    position: relative;
+    word-wrap: break-word;
+    box-shadow: 0 1px 0.5px rgba(0,0,0,0.13);
+  }
+  .message.sent {
+    background-color: #dcf8c6;
+    align-self: flex-end;
+    border-bottom-right-radius: 0;
+  }
+  .message.sent .username {
+    display: none;
+  }
+  .message.received {
+    background-color: white;
+    align-self: flex-start;
+    border-bottom-left-radius: 0;
+  }
+  .message .username {
+    font-weight: 600;
+    font-size: 0.75rem;
+    color: #444;
+    margin-bottom: 3px;
+  }
+  .message img {
+    max-width: 200px;
+    border-radius: 10px;
+    margin-top: 5px;
+  }
+
+  /* Input area */
+  #messageForm {
+    background: white;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    border-top: 1px solid #ddd;
+  }
+  #messageInput {
+    flex-grow: 1;
+    padding: 10px 15px;
+    border-radius: 25px;
+    border: 1px solid #ddd;
+    outline: none;
+    font-size: 1rem;
+  }
+  #messageInput:focus {
+    border-color: #25d366;
+  }
+  #emojiBtn, #imageInputLabel {
+    cursor: pointer;
+    margin-left: 10px;
+    font-size: 1.5rem;
+    color: #888;
+    user-select: none;
+  }
+  #sendBtn {
+    background: #25d366;
+    border: none;
+    color: white;
+    padding: 10px 18px;
+    border-radius: 25px;
+    margin-left: 10px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  #sendBtn:disabled {
+    background: #a5d6a7;
+    cursor: not-allowed;
+  }
+
+  /* Login Section */
+  #login-section {
+    display: flex;
+    height: 100vh;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+  }
+  #login-section input {
+    padding: 12px 15px;
+    font-size: 1rem;
+    border-radius: 25px;
+    border: 1px solid #ddd;
+    outline: none;
+    margin-bottom: 15px;
+    width: 250px;
+  }
+  #login-section button {
+    background: #25d366;
+    border: none;
+    color: white;
+    padding: 12px 30px;
+    font-size: 1rem;
+    border-radius: 25px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+</style>
 </head>
-<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex h-screen select-none transition-colors duration-500">
+<body>
 
-  <!-- LOGIN SCREEN -->
-  <div id="login-section" class="m-auto max-w-sm w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
-    <h1 class="text-2xl font-semibold mb-6 text-center">Welcome to Only For Her</h1>
-    <input id="username-input" type="text" placeholder="Enter your name" 
-      class="w-full border border-gray-300 rounded-lg p-3 mb-5 text-gray-900 dark:text-gray-100 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-    <button id="login-btn" class="w-full bg-green-600 hover:bg-green-700 transition-colors text-white font-semibold py-3 rounded-lg shadow-md">Join Chat</button>
+<div id="login-section">
+  <input id="username-input" type="text" placeholder="Enter your name" />
+  <button id="login-btn">Login</button>
+</div>
+
+<div class="app-container hidden" id="chat-ui" style="display:none;">
+
+  <!-- Groups Sidebar -->
+  <div id="groupsPage">
+    <header>Groups</header>
+    <div id="groupsList">Loading groups...</div>
+    <form id="newGroupForm" onsubmit="event.preventDefault(); createGroup();">
+      <input id="newGroupName" type="text" placeholder="New group name" autocomplete="off" />
+      <button id="createGroupBtn" type="submit">Create</button>
+    </form>
   </div>
 
-  <!-- CHAT APP -->
-  <div id="chat-ui" class="hidden flex flex-1 max-w-7xl mx-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
-
-    <!-- LEFT SIDEBAR: Groups/Chats -->
-    <div id="groupsPage" class="w-80 flex flex-col border-r border-gray-300 dark:border-gray-700">
-      <header class="flex items-center justify-between px-5 py-4 border-b border-gray-300 dark:border-gray-700">
-        <h2 class="text-xl font-bold">Groups</h2>
-        <span id="currentUserLabel" class="text-sm italic text-gray-500 dark:text-gray-400"></span>
-      </header>
-
-      <div id="groupsList" class="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-100 dark:bg-gray-900">
-        <!-- Groups will load here -->
-      </div>
-
-      <div class="p-4 border-t border-gray-300 dark:border-gray-700 flex gap-2">
-        <input id="newGroupName" type="text" placeholder="New group name" 
-          class="flex-1 border border-gray-300 dark:border-gray-700 rounded-lg p-2 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500" />
-        <button onclick="createGroup()" 
-          class="bg-green-600 hover:bg-green-700 text-white font-semibold px-4 rounded-lg shadow-md transition-colors">Create</button>
-      </div>
-      <div class="p-3 border-t border-gray-300 dark:border-gray-700 flex items-center justify-between gap-4">
-        <label for="darkModeToggle" class="cursor-pointer select-none text-gray-700 dark:text-gray-300 flex items-center gap-2">
-          <input type="checkbox" id="darkModeToggle" class="hidden" />
-          <svg id="sunIcon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M12 3v1m0 16v1m8.66-12.34l-.7.7m-14.9 0l-.7-.7M21 12h-1M4 12H3m16.66 4.34l-.7-.7m-14.9 0l-.7.7M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
-          <span>Dark Mode</span>
-        </label>
-      </div>
+  <!-- Chat Window -->
+  <div id="chatPage" class="hidden flex flex-col">
+    <div id="chatHeader">
+      <button onclick="backToGroups()">←</button>
+      <div id="groupTitle">Select a group</div>
+      <div id="currentUserLabel" title="You"></div>
     </div>
 
-    <!-- RIGHT MAIN CHAT AREA -->
-    <div id="chatPage" class="hidden flex flex-col flex-1 bg-white dark:bg-gray-900">
-      <!-- Chat header -->
-      <header class="flex items-center justify-between border-b border-gray-300 dark:border-gray-700 px-6 py-3 bg-gray-50 dark:bg-gray-800 shadow-sm">
-        <button onclick="backToGroups()" class="text-blue-600 dark:text-blue-400 font-semibold hover:underline">← Back</button>
-        <h2 id="groupTitle" class="text-lg font-semibold truncate max-w-xs"></h2>
-        <div id="typingIndicator" class="text-sm italic text-gray-600 dark:text-gray-400"></div>
-      </header>
+    <div id="messages"></div>
 
-      <!-- Messages list -->
-      <div id="messages" class="flex-1 p-6 overflow-y-auto space-y-3 bg-gray-50 dark:bg-gray-900 scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-700 flex flex-col">
-        <!-- Messages appended here -->
-      </div>
-
-      <!-- Message input area -->
-      <footer class="flex items-center gap-3 px-6 py-4 border-t border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-        <button id="emojiBtn" class="text-2xl hover:bg-gray-200 dark:hover:bg-gray-700 p-2 rounded-full transition"><span>😊</span></button>
-        <input
-          id="messageInput"
-          type="text"
-          placeholder="Type a message"
-          autocomplete="off"
-          class="flex-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-full py-2 px-4 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          onkeydown="if(event.key==='Enter'){sendMessage();}"
-        />
-        <input type="file" id="imageInput" accept="image/*" onchange="previewImage(event)" class="hidden" />
-        <button onclick="document.getElementById('imageInput').click()" 
-          class="text-xl hover:bg-gray-200 dark:hover:bg-gray-700 p-2 rounded-full transition" title="Send Image">📷</button>
-
-        <button id="recordBtn" title="Record Voice Note" class="text-red-600 hover:bg-red-100 dark:hover:bg-red-900 p-2 rounded-full transition">
-          🎤
-        </button>
-
-        <button onclick="sendMessage()" 
-          class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-full shadow-md transition">Send</button>
-      </footer>
-    </div>
+    <form id="messageForm" onsubmit="event.preventDefault(); sendMessage();">
+      <input
+        id="messageInput"
+        type="text"
+        placeholder="Type a message"
+        autocomplete="off"
+      />
+      <label id="emojiBtn" title="Insert emoji" for="dummy" style="user-select:none;">😊</label>
+      <label id="imageInputLabel" title="Attach image" for="imageInput" style="user-select:none;">📎</label>
+      <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="previewImage(event)" />
+      <button id="sendBtn" type="submit">Send</button>
+    </form>
   </div>
 
-  <script type="module">
+</div>
+
+<script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
     getFirestore,
@@ -170,7 +345,7 @@
     };
     loginSection.style.display = "none";
     chatUI.style.display = "flex";
-    currentUserLabel.textContent = `Logged in as: ${currentUser.displayName}`;
+    currentUserLabel.textContent = `You: ${currentUser.displayName}`;
     loadGroups();
   });
 
@@ -244,14 +419,16 @@
   }
 
   function showChatUI() {
-    document.getElementById("groupsPage").classList.add("hidden");
+    document.getElementById("groupsPage").classList.remove("hidden");
     document.getElementById("chatPage").classList.remove("hidden");
+    // Hide groups sidebar on mobile or keep visible on desktop
   }
 
   async function sendMessage() {
     if (!currentGroupId) return alert("No group selected");
     const text = document.getElementById("messageInput").value.trim();
     if (!text && !selectedImage) return;
+
     let imageUrl = null;
 
     if (selectedImage) {
@@ -282,15 +459,13 @@
         const msg = doc.data();
         const div = document.createElement("div");
         div.className =
-          "p-2 rounded-lg max-w-[70%] mb-2 flex flex-col " +
-          (msg.uid === currentUser.uid
-            ? "bg-blue-500 text-white self-end"
-            : "bg-gray-200 text-black self-start dark:bg-gray-700 dark:text-white");
+          "message " +
+          (msg.uid === currentUser.uid ? "sent" : "received");
 
         div.innerHTML =
-          `<div class="text-xs mb-1 opacity-70">${msg.username}</div>` +
+          `<div class="username">${msg.username}</div>` +
           (msg.text ? `<div>${msg.text}</div>` : "") +
-          (msg.imageUrl ? `<img src="${msg.imageUrl}" class="mt-2 rounded shadow max-w-[200px]"/>` : "");
+          (msg.imageUrl ? `<img src="${msg.imageUrl}" alt="image"/>` : "");
 
         messagesList.appendChild(div);
       });
@@ -305,23 +480,8 @@
   function backToGroups() {
     currentGroupId = null;
     document.getElementById("chatPage").classList.add("hidden");
-    document.getElementById("groupsPage").classList.remove("hidden");
+    // Show groups sidebar clearly
   }
 
   window.createGroup = createGroup;
   window.sendMessage = sendMessage;
-  window.previewImage = previewImage;
-  window.backToGroups = backToGroups;
-
-  window.onload = () => {
-    const picker = new EmojiButton();
-    const trigger = document.querySelector("#emojiBtn");
-    picker.on("emoji", (emoji) => {
-      document.getElementById("messageInput").value += emoji;
-    });
-    trigger.addEventListener("click", () => picker.togglePicker(trigger));
-  };
-</script>
-
-</body>
-</html>
