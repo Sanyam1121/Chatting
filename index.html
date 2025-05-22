@@ -7,14 +7,16 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
- <div id="login">
+<div id="login">
   <div class="login-box">
     <h2>Join Chat</h2>
+    <img id="pfp-preview" src="https://api.dicebear.com/7.x/thumbs/svg?seed=chat" />
     <input id="username" placeholder="Enter your name" />
-    <input id="pfp" placeholder="Paste profile picture URL (optional)" />
+    <input type="file" id="pfp-upload" accept="image/*" />
     <button onclick="joinChat()">Start Chat</button>
   </div>
 </div>
+
 
   <div id="chat" class="hidden">
     <div id="chat-header"><img id="pfp-display"><span id="user-display"></span></div>
