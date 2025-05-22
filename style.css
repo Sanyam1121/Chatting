@@ -76,3 +76,63 @@ body {
   font-size: 0.9em;
   color: #555;
 }
+#login {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(to bottom right, #ece9e6, #ffffff);
+}
+
+.login-box {
+  background: white;
+  padding: 2.5em;
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+.login-box h2 {
+  margin-bottom: 20px;
+  font-weight: 600;
+  color: #333;
+}
+
+.login-box input {
+  width: 100%;
+  padding: 12px;
+  margin: 10px 0;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1em;
+  transition: border 0.2s;
+}
+
+.login-box input:focus {
+  border-color: #007aff;
+  outline: none;
+}
+
+.login-box button {
+  background-color: #007aff;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  font-size: 1em;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: background-color 0.3s;
+}
+
+.login-box button:hover {
+  background-color: #005ecb;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
