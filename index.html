@@ -183,41 +183,49 @@
       document.getElementById("chatPage").classList.remove("hidden");
     }
 
-    async function sendMessage() {
-      if (!currentGroupId) return alert("No group selected");
-      const textInput = document.getElementById("messageInput");
-      const text = textInput.value.trim();
-      if (!text && !selectedImage) return;
+   async function sendMessage() {
+  if (!currentGroupId || !currentUser) {
+    alert("Please select a group and login.");
+    return;
+  }
 
-      let imageUrl = null;
-      if (selectedImage) {
-        try {
-          const storageRef = ref(storage, "images/" + Date.now() + "-" + selectedImage.name);
-          await uploadBytes(storageRef, selectedImage);
-          imageUrl = await getDownloadURL(storageRef);
-          selectedImage = null;
-          document.getElementById("imageInput").value = "";
-        } catch (error) {
-          alert("Image upload failed: " + error.message);
-          return;
-        }
-      }
+  const input = document.getElementById("messageInput");
+  const text = input.value.trim();
+  if (text === "" && !selectedImage) {
+    alert("Type a message or select an image.");
+    return;
+  }
 
-      try {
-        const messageRef = await addDoc(collection(db, "groups", currentGroupId, "messages"), {
-          uid: currentUser.uid,
-          username: currentUser.displayName,
-          text: text || null,
-          imageUrl: imageUrl || null,
-          timestamp: serverTimestamp(),
-          reactions: {},  // reactions object {emoji: [userIds]}
-        });
-        textInput.value = "";
-        clearTyping();
-      } catch (error) {
-        alert("Failed to send message: " + error.message);
-      }
+  let imageUrl = null;
+
+  if (selectedImage) {
+    // Upload image to Firebase Storage
+    const storageRef = ref(storage, `groupImages/${currentGroupId}/${Date.now()}_${selectedImage.name}`);
+    try {
+      const snapshot = await uploadBytes(storageRef, selectedImage);
+      imageUrl = await getDownloadURL(snapshot.ref);
+    } catch (error) {
+      alert("Failed to upload image: " + error.message);
+      return;
     }
+  }
+
+  try {
+    await addDoc(collection(db, "groups", currentGroupId, "messages"), {
+      uid: currentUser.uid,
+      username: currentUser.displayName || currentUser.email || "Unknown",
+      text: text || "",
+      imageUrl: imageUrl || null,
+      timestamp: serverTimestamp(),
+      reactions: {}
+    });
+    input.value = "";
+    selectedImage = null;
+  } catch (error) {
+    alert("Failed to send message: " + error.message);
+  }
+}
+
 
     function listenToMessages(groupId) {
       const messagesRef = collection(db, "groups", groupId, "messages");
