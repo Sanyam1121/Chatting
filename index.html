@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" >
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Firebase Group Chat - Name Login</title>
+  <title>Firebase Group Chat with Advanced Features</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.min.js"></script>
   <script type="module">
@@ -18,7 +18,10 @@
       doc,
       getDocs,
       deleteDoc,
-      serverTimestamp
+      serverTimestamp,
+      updateDoc,
+      setDoc,
+      getDoc,
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import {
       getStorage,
@@ -27,6 +30,7 @@
       getDownloadURL,
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
+    // Firebase config (replace with yours)
     const firebaseConfig = {
       apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
       authDomain: "chatting-fd641.firebaseapp.com",
@@ -37,25 +41,31 @@
       measurementId: "G-RKS4CFZPJ4",
     };
 
+    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const storage = getStorage(app);
 
-    // User info, no auth, just name and random id:
     let currentUser = null;
     let selectedImage = null;
+    let selectedAudio = null;
+    let selectedVideo = null;
     let currentGroupId = null;
 
-    // Elements
+    // DOM elements
     const loginSection = document.getElementById("login-section");
     const chatUI = document.getElementById("chat-ui");
     const usernameInput = document.getElementById("username-input");
     const loginBtn = document.getElementById("login-btn");
-
     const groupsList = document.getElementById("groupsList");
     const messagesList = document.getElementById("messages");
     const currentUserLabel = document.getElementById("currentUserLabel");
     const groupTitle = document.getElementById("groupTitle");
+    const typingIndicator = document.getElementById("typingIndicator");
+    const darkToggleBtn = document.getElementById("darkToggleBtn");
+
+    let typingTimeout = null;
+    let isTyping = false;
 
     loginBtn.addEventListener("click", () => {
       const name = usernameInput.value.trim();
@@ -71,8 +81,10 @@
       chatUI.style.display = "flex";
       currentUserLabel.textContent = `Logged in as: ${currentUser.displayName}`;
       loadGroups();
+      applyInitialDarkMode();
     });
 
+    // Load groups and listen for changes
     async function loadGroups() {
       groupsList.innerHTML = "Loading groups...";
       const groupsRef = collection(db, "groups");
@@ -139,6 +151,8 @@
       groupTitle.textContent = groupName;
       showChatUI();
       listenToMessages(groupId);
+      listenToTyping(groupId);
+      updateReadReceipts(groupId);
     }
 
     function showChatUI() {
@@ -146,17 +160,34 @@
       document.getElementById("chatPage").classList.remove("hidden");
     }
 
+    // Send a message (text, image, audio, or video)
     async function sendMessage() {
       if (!currentGroupId) return alert("No group selected");
       const text = document.getElementById("messageInput").value.trim();
-      if (!text && !selectedImage) return;
+      if (!text && !selectedImage && !selectedAudio && !selectedVideo) return;
+
       let imageUrl = null;
+      let audioUrl = null;
+      let videoUrl = null;
 
       if (selectedImage) {
         const storageRef = ref(storage, "images/" + Date.now() + "-" + selectedImage.name);
         await uploadBytes(storageRef, selectedImage);
         imageUrl = await getDownloadURL(storageRef);
         selectedImage = null;
+        document.getElementById("imageInput").value = "";
+      }
+      if (selectedAudio) {
+        const storageRef = ref(storage, "audio/" + Date.now() + ".webm");
+        await uploadBytes(storageRef, selectedAudio);
+        audioUrl = await getDownloadURL(storageRef);
+        selectedAudio = null;
+      }
+      if (selectedVideo) {
+        const storageRef = ref(storage, "video/" + Date.now() + ".webm");
+        await uploadBytes(storageRef, selectedVideo);
+        videoUrl = await getDownloadURL(storageRef);
+        selectedVideo = null;
       }
 
       await addDoc(collection(db, "groups", currentGroupId, "messages"), {
@@ -164,105 +195,323 @@
         username: currentUser.displayName,
         text: text || null,
         imageUrl: imageUrl || null,
+        audioUrl: audioUrl || null,
+        videoUrl: videoUrl || null,
         timestamp: new Date(),
+        seenBy: [currentUser.uid], // message sender has seen it
       });
 
       document.getElementById("messageInput").value = "";
-      document.getElementById("imageInput").value = "";
+      updateTypingStatus(false);
     }
 
+    // Listen for messages and update UI
     function listenToMessages(groupId) {
       const messagesRef = collection(db, "groups", groupId, "messages");
       const q = query(messagesRef, orderBy("timestamp", "asc"));
       onSnapshot(q, (snapshot) => {
         messagesList.innerHTML = "";
-        snapshot.forEach((doc) => {
-          const msg = doc.data();
+        snapshot.forEach((docSnap) => {
+          const msg = docSnap.data();
+          const messageId = docSnap.id;
           const div = document.createElement("div");
           div.className =
             "p-2 rounded-lg max-w-[70%] mb-2 flex flex-col " +
             (msg.uid === currentUser.uid
               ? "bg-blue-500 text-white self-end"
               : "bg-gray-200 text-black self-start dark:bg-gray-700 dark:text-white");
-          div.innerHTML =
-            `<div class="text-xs mb-1 opacity-70">${msg.username}</div>` +
-            (msg.text ? `<div>${msg.text}</div>` : "") +
-            (msg.imageUrl ? `<img src="${msg.imageUrl}" class="mt-2 rounded shadow max-w-[200px]"/>` : "");
+          div.dataset.msgId = messageId;
+
+          // Username
+          div.innerHTML = `<div class="text-xs mb-1 opacity-70">${msg.username}</div>`;
+
+          // Text message
+          if (msg.text) {
+            div.innerHTML += `<div>${msg.text}</div>`;
+          }
+
+          // Image
+          if (msg.imageUrl) {
+            div.innerHTML += `<img src="${msg.imageUrl}" class="mt-2 rounded shadow max-w-[200px]"/>`;
+          }
+
+          // Audio
+          if (msg.audioUrl) {
+            div.innerHTML += `<audio controls src="${msg.audioUrl}" class="mt-2 rounded"></audio>`;
+          }
+
+          // Video
+          if (msg.videoUrl) {
+            div.innerHTML += `<video controls src="${msg.videoUrl}" class="mt-2 rounded max-w-[250px]"></video>`;
+          }
+
+          // Read receipt checkmark if seen by all (simple example: seen by >1)
+          const seenByCount = msg.seenBy ? msg.seenBy.length : 0;
+          if (msg.uid === currentUser.uid) {
+            div.innerHTML += `<div class="text-xs self-end mt-1 opacity-70">${seenByCount > 1 ? '✓ Seen' : '✓ Sent'}</div>`;
+          }
+
           messagesList.appendChild(div);
+
+          // Mark this message as seen if not already
+          if (!msg.seenBy || !msg.seenBy.includes(currentUser.uid)) {
+            const messageRef = doc(db, "groups", currentGroupId, "messages", messageId);
+            updateDoc(messageRef, {
+              seenBy: msg.seenBy ? [...msg.seenBy, currentUser.uid] : [currentUser.uid],
+            });
+          }
         });
         messagesList.scrollTop = messagesList.scrollHeight;
       });
     }
 
-    function previewImage(event) {
-      selectedImage = event.target.files[0];
+    // Typing indicator logic
+    let typingRef = null;
+    let typingListenerUnsub = null;
+
+    function listenToTyping(groupId) {
+      if (typingListenerUnsub) typingListenerUnsub();
+
+      typingRef = doc(db, "groups", groupId, "typingStatus", "status");
+      typingListenerUnsub = onSnapshot(typingRef, (docSnap) => {
+        if (!docSnap.exists()) {
+          typingIndicator.textContent = "";
+          return;
+        }
+        const data = docSnap.data();
+        // Show names of users typing except current user
+        const typingUsers = Object.entries(data)
+          .filter(([uid, typing]) => typing && uid !== currentUser.uid)
+          .map(([uid]) => data[uid + "_name"] || "Someone");
+        typingIndicator.textContent = typingUsers.length
+          ? `${typingUsers.join(", ")} is typing...`
+          : "";
+      });
     }
 
-    function backToGroups() {
+    // Update typing status in Firestore
+    let typingTimeoutHandle = null;
+    function updateTypingStatus(typing) {
+      if (!currentGroupId) return;
+      if (!typingRef) typingRef = doc(db, "groups", currentGroupId, "typingStatus", "status");
+      setDoc(typingRef, { 
+        [currentUser.uid]: typing,
+        [currentUser.uid + "_name"]: currentUser.displayName
+      }, { merge: true });
+
+      if (typing) {
+        if (typingTimeoutHandle) clearTimeout(typingTimeoutHandle);
+        typingTimeoutHandle = setTimeout(() => updateTypingStatus(false), 3000);
+      }
+    }
+
+    // When user types in input, update typing status
+    document.getElementById("messageInput").addEventListener("input", () => {
+      if (!isTyping) {
+        isTyping = true;
+        updateTypingStatus(true);
+      }
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
+        isTyping = false;
+        updateTypingStatus(false);
+      }, 3000);
+    });
+
+    // Read receipts update on entering group - mark all messages as seen by current user
+    async function updateReadReceipts(groupId) {
+      const messagesRef = collection(db, "groups", groupId, "messages");
+      const q = query(messagesRef, orderBy("timestamp", "asc"));
+      const snapshot = await getDocs(q);
+      snapshot.forEach(async (docSnap) => {
+        const msg = docSnap.data();
+        if (!msg.seenBy || !msg.seenBy.includes(currentUser.uid)) {
+          const messageRef = doc(db, "groups", groupId, "messages", docSnap.id);
+          await updateDoc(messageRef, {
+            seenBy: msg.seenBy ? [...msg.seenBy, currentUser.uid] : [currentUser.uid],
+          });
+        }
+      });
+    }
+
+    // Dark mode toggle logic
+    darkToggleBtn.addEventListener("click", () => {
+      document.documentElement.classList.toggle("dark");
+      localStorage.setItem("darkMode", document.documentElement.classList.contains("dark"));
+    });
+
+    function applyInitialDarkMode() {
+      const saved = localStorage.getItem("darkMode");
+      if (saved === "true" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    }
+
+    // Image preview and selection
+    function previewImage(event) {
+      const file = event.target.files[0];
+      if (file) {
+        selectedImage = file;
+      }
+    }
+    window.previewImage = previewImage;
+
+    // Audio recording and sending
+    const recordAudioBtn = document.getElementById("recordAudioBtn");
+    let mediaRecorder = null;
+    let audioChunks = [];
+
+    recordAudioBtn.onclick = async () => {
+      if (!mediaRecorder) {
+        // Request permission and start recording
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+          audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+          selectedAudio = audioBlob;
+          await sendMessage();
+          selectedAudio = null;
+          recordAudioBtn.textContent = "🎤 Record Audio";
+          mediaRecorder = null;
+        };
+
+        mediaRecorder.start();
+        recordAudioBtn.textContent = "⏹ Stop Recording";
+      } else {
+        mediaRecorder.stop();
+      }
+    };
+
+    // Video recording and sending
+    const recordVideoBtn = document.getElementById("recordVideoBtn");
+    let mediaRecorderVideo = null;
+    let videoChunks = [];
+
+    recordVideoBtn.onclick = async () => {
+      if (!mediaRecorderVideo) {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        mediaRecorderVideo = new MediaRecorder(stream);
+        videoChunks = [];
+
+        mediaRecorderVideo.ondataavailable = (e) => {
+          videoChunks.push(e.data);
+        };
+
+        mediaRecorderVideo.onstop = async () => {
+          const videoBlob = new Blob(videoChunks, { type: "video/webm" });
+          selectedVideo = videoBlob;
+          await sendMessage();
+          selectedVideo = null;
+          recordVideoBtn.textContent = "🎥 Record Video";
+          mediaRecorderVideo = null;
+
+          // Stop all tracks on stream
+          stream.getTracks().forEach((track) => track.stop());
+        };
+
+        mediaRecorderVideo.start();
+        recordVideoBtn.textContent = "⏹ Stop Recording";
+      } else {
+        mediaRecorderVideo.stop();
+      }
+    };
+
+    // Emoji picker
+    const emojiBtn = document.getElementById("emojiBtn");
+    const messageInput = document.getElementById("messageInput");
+    const picker = new EmojiButton();
+
+    emojiBtn.addEventListener("click", () => {
+      picker.togglePicker(emojiBtn);
+    });
+
+    picker.on("emoji", (emoji) => {
+      messageInput.value += emoji;
+      messageInput.focus();
+      updateTypingStatus(true);
+    });
+
+    // Back to groups button
+    document.getElementById("backToGroupsBtn").onclick = () => {
       currentGroupId = null;
       document.getElementById("chatPage").classList.add("hidden");
       document.getElementById("groupsPage").classList.remove("hidden");
-    }
-
-    window.createGroup = createGroup;
-    window.sendMessage = sendMessage;
-    window.previewImage = previewImage;
-    window.backToGroups = backToGroups;
-
-    window.onload = () => {
-      const picker = new EmojiButton();
-      const trigger = document.querySelector("#emojiBtn");
-      picker.on("emoji", (emoji) => {
-        document.getElementById("messageInput").value += emoji;
-      });
-      trigger.addEventListener("click", () => picker.togglePicker(trigger));
+      typingIndicator.textContent = "";
     };
   </script>
 
   <style>
-    body.dark {
-      background-color: #1a202c;
-      color: white;
+    /* Dark mode */
+    .dark {
+      --bg-color: #1a202c;
+      --text-color: #cbd5e0;
     }
-    .dark input,
-    .dark textarea {
-      color: black;
+    body {
+      background-color: var(--bg-color, white);
+      color: var(--text-color, black);
     }
   </style>
 </head>
+<body class="h-screen flex flex-col bg-white dark:bg-gray-900 text-black dark:text-white">
 
-<body class="min-h-screen bg-gray-100 dark:bg-gray-900 text-black dark:text-white flex flex-col items-center p-4">
-  <!-- Login section -->
-  <div id="login-section" class="w-full max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-    <h1 class="text-xl font-bold mb-4">Enter your name</h1>
-    <input id="username-input" type="text" placeholder="Your name" class="w-full border rounded p-2 mb-4 text-black" />
-    <button id="login-btn" class="bg-blue-500 text-white px-4 py-2 rounded w-full">Join Chat</button>
-  </div>
+  <!-- Login Section -->
+  <section id="login-section" class="flex flex-col items-center justify-center h-full p-4">
+    <h1 class="text-3xl mb-4 font-bold">Enter Your Name</h1>
+    <input
+      id="username-input"
+      type="text"
+      placeholder="Your Name"
+      class="border border-gray-400 rounded p-2 mb-4 w-64 text-black"
+      autocomplete="off"
+    />
+    <button id="login-btn" class="bg-blue-600 text-white px-4 py-2 rounded w-64">Join Chat</button>
+  </section>
 
-  <!-- Main chat UI -->
-  <div id="chat-ui" class="hidden w-full max-w-2xl flex flex-col bg-white dark:bg-gray-800 rounded shadow-lg h-[85vh] mt-6">
+  <!-- Chat UI -->
+  <div id="chat-ui" class="hidden flex flex-col h-full max-w-4xl mx-auto w-full">
+    <!-- Header -->
+    <header class="flex justify-between items-center p-4 border-b dark:border-gray-700">
+      <div id="currentUserLabel" class="font-semibold"></div>
+      <button id="darkToggleBtn" class="bg-gray-300 dark:bg-gray-700 text-black dark:text-white px-3 py-1 rounded">Toggle Dark Mode</button>
+    </header>
+
     <!-- Groups Page -->
-    <div id="groupsPage" class="flex flex-col h-full">
-      <div class="font-bold text-lg mb-2 flex justify-between items-center px-4 py-2 border-b dark:border-gray-700">
-        Groups
-        <span id="currentUserLabel" class="text-xs italic"></span>
-      </div>
-      <div id="groupsList" class="flex-1 overflow-y-auto p-4"></div>
-      <div class="flex gap-2 p-4 border-t dark:border-gray-700">
-        <input id="newGroupName" type="text" placeholder="New group name" class="flex-1 border rounded p-2 text-black" />
+    <section id="groupsPage" class="flex flex-col p-4 overflow-auto flex-1">
+      <h2 class="text-xl font-bold mb-2">Groups</h2>
+      <div id="groupsList" class="flex flex-col gap-2 overflow-auto"></div>
+
+      <div class="mt-4 flex gap-2 items-center">
+        <input
+          id="newGroupName"
+          type="text"
+          placeholder="New group name"
+          class="flex-1 border rounded p-2 text-black"
+        />
         <button onclick="createGroup()" class="bg-green-600 text-white px-4 rounded">Create</button>
       </div>
-    </div>
+    </section>
 
     <!-- Chat Page -->
-    <div id="chatPage" class="hidden flex flex-col h-full">
+    <section id="chatPage" class="hidden flex flex-col h-full">
       <div class="flex items-center justify-between p-4 border-b dark:border-gray-700">
-        <button onclick="backToGroups()" class="text-blue-600 dark:text-blue-400">← Back to groups</button>
+        <button id="backToGroupsBtn" class="text-blue-600 dark:text-blue-400">← Back to groups</button>
         <h2 id="groupTitle" class="font-bold text-lg"></h2>
         <div></div>
       </div>
+
       <div id="messages" class="flex-1 overflow-y-auto p-4 flex flex-col gap-1"></div>
-      <div class="p-4 border-t dark:border-gray-700 flex items-center gap-2">
+
+      <div id="typingIndicator" class="p-2 text-sm italic opacity-60 min-h-[20px] px-4"></div>
+
+      <div class="p-4 border-t dark:border-gray-700 flex flex-wrap gap-2 items-center">
         <button id="emojiBtn" class="text-xl">😊</button>
         <input
           id="messageInput"
@@ -273,9 +522,13 @@
         />
         <input type="file" id="imageInput" accept="image/*" onchange="previewImage(event)" class="hidden" />
         <button onclick="document.getElementById('imageInput').click()" class="bg-gray-200 dark:bg-gray-700 rounded px-3 py-2">📷</button>
+
+        <button id="recordAudioBtn" class="bg-purple-600 text-white rounded px-3 py-2">🎤 Record Audio</button>
+        <button id="recordVideoBtn" class="bg-pink-600 text-white rounded px-3 py-2">🎥 Record Video</button>
+
         <button onclick="sendMessage()" class="bg-blue-600 text-white px-4 py-2 rounded">Send</button>
       </div>
-    </div>
+    </section>
   </div>
 </body>
 </html>
