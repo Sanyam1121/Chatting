@@ -1,522 +1,175 @@
 <!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Group Chat with Firebase</title>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body, html { height: 100%; margin: 0; }
-    .group-circle {
-      width: 44px; height: 44px; border-radius: 50%;
-      display: flex; justify-content: center; align-items: center;
-      cursor: pointer; margin: 0 4px 12px 4px;
-      font-weight: 600; font-size: 1.15rem;
-      user-select: none;
-      transition: background-color 0.3s ease;
-    }
-    .group-circle.selected {
-      background-color: #3b82f6; /* blue-500 */
-      color: white;
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Firebase Chat Groups</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
-<body class="bg-gray-900 text-white flex flex-col h-screen">
-  <!-- Auth area -->
-  <div id="auth-area" class="flex flex-col items-center justify-center flex-grow space-y-4 p-6">
-    <h1 class="text-3xl font-bold">Firebase Group Chat</h1>
-    <input id="email" type="email" placeholder="Email" class="p-2 rounded text-black w-64" />
-    <input id="password" type="password" placeholder="Password" class="p-2 rounded text-black w-64" />
-    <div class="space-x-4">
-      <button id="signup-btn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded">Sign Up</button>
-      <button id="login-btn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded">Log In</button>
-    </div>
-    <p id="auth-msg" class="text-red-400"></p>
-  </div>
-
-  <!-- Main app area -->
-  <div id="app" class="hidden flex-grow flex">
-    <!-- Left sidebar: Groups list + Create Group -->
-    <aside class="w-20 bg-gray-800 flex flex-col items-center py-4 overflow-y-auto">
-      <button id="open-create-group" title="Create Group" class="mb-6 bg-green-500 hover:bg-green-600 text-white rounded p-2 w-12 h-12 flex items-center justify-center font-bold text-xl">+</button>
-      <div id="chat-list" class="flex flex-col items-center"></div>
-      <button id="logout-btn" title="Logout" class="mt-auto mb-4 bg-red-600 hover:bg-red-700 p-2 rounded w-12 h-12 flex items-center justify-center text-xl">⎋</button>
+<body class="bg-gray-900 text-white">
+  <div id="app" class="flex h-screen">
+    
+    <!-- Sidebar for Groups -->
+    <aside class="w-1/5 bg-gray-800 p-4 flex flex-col space-y-4">
+      <h1 class="text-xl font-bold">Groups</h1>
+      
+      <!-- Group List -->
+      <div id="groupList" class="flex flex-col gap-2 overflow-y-auto flex-1"></div>
+      
+      <!-- Create Group -->
+      <form id="create-group-form" class="flex gap-2">
+        <input id="group-name" type="text" placeholder="New Group" class="flex-1 p-2 bg-gray-700 rounded" required />
+        <button type="submit" class="bg-green-600 px-2 rounded">➕</button>
+      </form>
+      
+      <button id="logout" class="bg-red-600 p-2 rounded">Logout</button>
     </aside>
-
-    <!-- Center chat area -->
-    <main class="flex flex-col flex-grow bg-gray-900">
-      <header class="p-4 border-b border-gray-700 flex items-center justify-between">
-        <h2 id="current-chat-title" class="text-xl font-semibold">Select a group</h2>
-        <div>
-          <button id="leave-group-btn" class="hidden bg-yellow-600 hover:bg-yellow-700 px-3 py-1 rounded mr-2 text-sm">Leave Group</button>
-          <button id="delete-group-btn" class="hidden bg-red-700 hover:bg-red-800 px-3 py-1 rounded mr-2 text-sm">Delete Group</button>
-        </div>
+    
+    <!-- Chat Area -->
+    <main class="flex-1 flex flex-col">
+      <header class="p-4 border-b border-gray-700">
+        <h2 id="chatTitle" class="text-xl font-semibold">Select a Group</h2>
       </header>
-      <section id="chat-messages" class="flex-grow p-4 overflow-y-auto space-y-2 bg-gray-800"></section>
-      <form id="chat-form" class="flex p-4 border-t border-gray-700" autocomplete="off">
-        <textarea id="message-input" rows="1" placeholder="Type a message..." class="flex-grow resize-none p-2 rounded bg-gray-700 text-white" disabled></textarea>
-        <button id="send-message-btn" type="submit" disabled class="ml-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded">Send</button>
-        <button id="image-btn" type="button" disabled class="ml-2 bg-gray-600 hover:bg-gray-700 rounded p-2" title="Send Image">📷</button>
-        <input type="file" id="image-input" accept="image/*" class="hidden" />
-      </form>
+      <div id="chatMessages" class="flex-1 p-4 overflow-y-auto space-y-2"></div>
+      <footer class="p-4 border-t border-gray-700 flex items-center gap-2">
+        <input id="messageInput" type="text" placeholder="Type a message..." class="flex-1 p-2 bg-gray-800 rounded" />
+        <button id="sendMessage" class="bg-blue-600 p-2 rounded">Send</button>
+      </footer>
     </main>
-
-    <!-- Right sidebar: Group details -->
-    <aside class="w-64 bg-gray-800 p-4 border-l border-gray-700 overflow-y-auto">
-      <h3 class="text-lg font-semibold mb-4">Group Details</h3>
-      <div id="group-details" class="space-y-2 text-sm text-gray-300">
-        <p><strong>Members:</strong></p>
-        <ul id="group-members" class="list-disc list-inside"></ul>
-      </div>
-    </aside>
   </div>
 
-  <!-- Create Group Modal -->
-  <div id="create-group-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden z-50">
-    <div class="bg-gray-900 p-6 rounded max-w-md w-full">
-      <h3 class="text-xl font-semibold mb-4">Create New Group</h3>
-      <form id="create-group-form" class="space-y-4">
-        <input type="text" id="new-group-name" placeholder="Group Name" required class="w-full p-2 rounded text-black" />
-        <textarea id="new-group-members" placeholder="Add member emails (comma separated)" class="w-full p-2 rounded text-black"></textarea>
-        <div class="flex justify-end space-x-4">
-          <button type="button" id="cancel-create-group" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">Cancel</button>
-          <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">Create</button>
-        </div>
-        <p id="create-group-msg" class="text-red-400"></p>
-      </form>
+  <!-- Login Screen -->
+  <div id="loginScreen" class="fixed inset-0 flex justify-center items-center bg-gray-900 z-50">
+    <div class="bg-gray-800 p-6 rounded w-80">
+      <h2 class="text-xl mb-4">Login</h2>
+      <input id="email" type="email" placeholder="Email" class="w-full p-2 mb-2 bg-gray-700 rounded" />
+      <input id="password" type="password" placeholder="Password" class="w-full p-2 mb-2 bg-gray-700 rounded" />
+      <button id="login" class="w-full bg-blue-600 p-2 rounded">Login</button>
+      <button id="signup" class="w-full mt-2 bg-green-600 p-2 rounded">Sign Up</button>
     </div>
   </div>
 
-<script>
-  // Firebase config - REPLACE with your Firebase project's config
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
-  authDomain: "chatting-fd641.firebaseapp.com",
-  projectId: "chatting-fd641",
-  storageBucket: "chatting-fd641.firebasestorage.app",
-  messagingSenderId: "535384451291",
-  appId: "1:535384451291:web:828f60686d81be018b44fe",
-  measurementId: "G-RKS4CFZPJ4"
-};
-  firebase.initializeApp(firebaseConfig);
-  const auth = firebase.auth();
-  const db = firebase.firestore();
-  const storage = firebase.storage();
-
-  // DOM references
-  const authArea = document.getElementById("auth-area");
-  const appArea = document.getElementById("app");
-  const emailInput = document.getElementById("email");
-  const passwordInput = document.getElementById("password");
-  const signupBtn = document.getElementById("signup-btn");
-  const loginBtn = document.getElementById("login-btn");
-  const authMsg = document.getElementById("auth-msg");
-  const logoutBtn = document.getElementById("logout-btn");
-  const chatList = document.getElementById("chat-list");
-  const currentChatTitle = document.getElementById("current-chat-title");
-  const chatMessages = document.getElementById("chat-messages");
-  const messageInput = document.getElementById("message-input");
-  const sendMessageBtn = document.getElementById("send-message-btn");
-  const imageBtn = document.getElementById("image-btn");
-  const imageInput = document.getElementById("image-input");
-  const createGroupModal = document.getElementById("create-group-modal");
-  const openCreateGroupBtn = document.getElementById("open-create-group");
-  const cancelCreateGroupBtn = document.getElementById("cancel-create-group");
-  const createGroupForm = document.getElementById("create-group-form");
-  const newGroupNameInput = document.getElementById("new-group-name");
-  const newGroupMembersInput = document.getElementById("new-group-members");
-  const createGroupMsg = document.getElementById("create-group-msg");
-  const leaveGroupBtn = document.getElementById("leave-group-btn");
-  const deleteGroupBtn = document.getElementById("delete-group-btn");
-  const groupMembersList = document.getElementById("group-members");
-
-  const chatForm = document.getElementById("chat-form");
-
-  // State variables
-  let currentUser = null;
-  let currentGroupId = null;
-  let unsubscribeMessages = null;
-  let unsubscribeGroups = null;
-
-  // Auth handlers
-  signupBtn.onclick = () => {
-    authMsg.textContent = "";
-    const email = emailInput.value.trim();
-    const password = passwordInput.value.trim();
-    if (!email || !password) {
-      authMsg.textContent = "Please enter email and password.";
-      return;
-    }
-    auth.createUserWithEmailAndPassword(email, password)
-      .catch(e => authMsg.textContent = e.message);
-  };
-
-  loginBtn.onclick = () => {
-    authMsg.textContent = "";
-    const email = emailInput.value.trim();
-    const password = passwordInput.value.trim();
-    if (!email || !password) {
-      authMsg.textContent = "Please enter email and password.";
-      return;
-    }
-    auth.signInWithEmailAndPassword(email, password)
-      .catch(e => authMsg.textContent = e.message);
-  };
-
-  logoutBtn.onclick = () => {
-    auth.signOut();
-  };
-
-  // Listen for auth state changes
-  auth.onAuthStateChanged(user => {
-    currentUser = user;
-    if (user) {
-      authArea.classList.add("hidden");
-      appArea.classList.remove("hidden");
-      enableChatControls(true);
-      subscribeGroups();
-    } else {
-      authArea.classList.remove("hidden");
-      appArea.classList.add("hidden");
-      enableChatControls(false);
-      clearChat();
-      clearGroups();
-      currentGroupId = null;
-      if (unsubscribeGroups) unsubscribeGroups();
-      if (unsubscribeMessages) unsubscribeMessages();
-    }
-  });
-
-  // Enable/disable chat input controls
-  function enableChatControls(enabled) {
-    messageInput.disabled = !enabled;
-    sendMessageBtn.disabled = !enabled;
-    imageBtn.disabled = !enabled;
-  }
-
-  // Subscribe to groups where currentUser is a member
-  function subscribeGroups() {
-    if (unsubscribeGroups) unsubscribeGroups();
-    unsubscribeGroups = db.collection("groups")
-      .where("members", "array-contains", currentUser.email)
-      .orderBy("createdAt", "desc")
-      .onSnapshot(snapshot => {
-        clearGroups();
-        if (snapshot.empty) {
-          chatList.innerHTML = `<p class="text-gray-400 mt-4 text-center">No groups. Create one!</p>`;
-          currentChatTitle.textContent = "Select a group";
-          clearChat();
-          return;
-        }
-        snapshot.forEach(doc => {
-          addGroupToList(doc.id, doc.data());
-        });
-      });
-  }
-
-  // Clear group list UI
-  function clearGroups() {
-    chatList.innerHTML = "";
-  }
-
-  // Add a group button to the sidebar list
-  function addGroupToList(id, data) {
-    // Create group circle element
-    const groupEl = document.createElement("div");
-    groupEl.className = "group-circle bg-gray-700 hover:bg-gray-600";
-    groupEl.textContent = getGroupInitials(data.name);
-    groupEl.title = data.name;
-    groupEl.dataset.groupId = id;
-
-    if (id === currentGroupId) {
-      groupEl.classList.add("selected");
-    }
-
-    groupEl.onclick = () => {
-      if (currentGroupId === id) return; // already selected
-      selectGroup(id, data);
+  <script>
+    // 🔧 Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
+      authDomain: "chatting-fd641.firebaseapp.com",
+      projectId: "chatting-fd641",
+      storageBucket: "chatting-fd641.appspot.com",
+      messagingSenderId: "535384451291",
+      appId: "1:535384451291:web:828f60686d81be018b44fe"
     };
 
-    chatList.appendChild(groupEl);
-  }
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
 
-  // Get initials for group from group name
-  function getGroupInitials(name) {
-    return name
-      .split(" ")
-      .map(w => w[0].toUpperCase())
-      .slice(0, 2)
-      .join("");
-  }
+    // DOM refs
+    const loginScreen = document.getElementById('loginScreen');
+    const app = document.getElementById('app');
+    const loginBtn = document.getElementById('login');
+    const signupBtn = document.getElementById('signup');
+    const logoutBtn = document.getElementById('logout');
+    const groupList = document.getElementById('groupList');
+    const createGroupForm = document.getElementById('create-group-form');
+    const groupNameInput = document.getElementById('group-name');
+    const chatMessages = document.getElementById('chatMessages');
+    const messageInput = document.getElementById('messageInput');
+    const sendMessageBtn = document.getElementById('sendMessage');
+    const chatTitle = document.getElementById('chatTitle');
 
-  // Select a group and subscribe to its messages
-  function selectGroup(id, data) {
-    currentGroupId = id;
-    updateSelectedGroupUI();
-    currentChatTitle.textContent = data.name;
-    loadGroupDetails(data);
-    subscribeMessages(id);
-    showGroupActionButtons(data);
-  }
+    let currentGroupId = null;
 
-  // Update sidebar group selection UI
-  function updateSelectedGroupUI() {
-    document.querySelectorAll(".group-circle").forEach(el => {
-      el.classList.toggle("selected", el.dataset.groupId === currentGroupId);
-    });
-  }
-
-  // Show/hide leave and delete buttons based on membership
-  function showGroupActionButtons(groupData) {
-    if (!groupData) {
-      leaveGroupBtn.style.display = "none";
-      deleteGroupBtn.style.display = "none";
-      return;
-    }
-    leaveGroupBtn.style.display = "inline-block";
-    // Show delete only if currentUser is creator
-    deleteGroupBtn.style.display = (groupData.creator === currentUser.email) ? "inline-block" : "none";
-  }
-
-  // Load group members in right sidebar
-  function loadGroupDetails(groupData) {
-    groupMembersList.innerHTML = "";
-    groupData.members.forEach(member => {
-      const li = document.createElement("li");
-      li.textContent = member;
-      groupMembersList.appendChild(li);
-    });
-  }
-
-  // Clear chat messages UI
-  function clearChat() {
-    chatMessages.innerHTML = "";
-    messageInput.value = "";
-  }
-
-  // Subscribe to messages for a group
-  function subscribeMessages(groupId) {
-    if (unsubscribeMessages) unsubscribeMessages();
-    clearChat();
-    unsubscribeMessages = db.collection("groups").doc(groupId).collection("messages")
-      .orderBy("createdAt")
-      .onSnapshot(snapshot => {
-        chatMessages.innerHTML = "";
-        snapshot.forEach(doc => {
-          const msg = doc.data();
-          addMessageToChat(doc.id, msg);
-        });
-        // Scroll to bottom
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-      });
-  }
-
-  // Add a single message to chat UI
-  function addMessageToChat(id, msg) {
-    const msgEl = document.createElement("div");
-    msgEl.className = "max-w-xs md:max-w-md break-words";
-
-    const isMe = msg.sender === currentUser.email;
-    msgEl.classList.add(isMe ? "self-end bg-blue-600" : "self-start bg-gray-700");
-    msgEl.classList.add("p-2 rounded-lg");
-
-    // Sender name small on top for others
-    if (!isMe) {
-      const senderEl = document.createElement("div");
-      senderEl.className = "text-xs text-gray-300 mb-1";
-      senderEl.textContent = msg.sender;
-      msgEl.appendChild(senderEl);
-    }
-
-    // Message text or image
-    if (msg.type === "image") {
-      const img = document.createElement("img");
-      img.src = msg.url;
-      img.alt = "Image";
-      img.className = "rounded max-w-full max-h-60 object-contain cursor-pointer";
-      img.onclick = () => window.open(msg.url, "_blank");
-      msgEl.appendChild(img);
-    } else {
-      const textEl = document.createElement("div");
-      textEl.textContent = msg.text;
-      msgEl.appendChild(textEl);
-    }
-
-    // Timestamp
-    const timeEl = document.createElement("div");
-    timeEl.className = "text-xs text-gray-400 mt-1 text-right";
-    const date = msg.createdAt ? msg.createdAt.toDate() : new Date();
-    timeEl.textContent = date.toLocaleString();
-    msgEl.appendChild(timeEl);
-
-    chatMessages.appendChild(msgEl);
-  }
-
-  // Send message handler
-  chatForm.onsubmit = async (e) => {
-    e.preventDefault();
-    const text = messageInput.value.trim();
-    if (!text || !currentGroupId) return;
-    sendMessageBtn.disabled = true;
-
-    try {
-      await db.collection("groups").doc(currentGroupId).collection("messages").add({
-        text,
-        sender: currentUser.email,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        type: "text"
-      });
-      messageInput.value = "";
-    } catch (error) {
-      alert("Failed to send message: " + error.message);
-    }
-
-    sendMessageBtn.disabled = false;
-  };
-
-  // Image button click triggers file input
-  imageBtn.onclick = () => {
-    imageInput.click();
-  };
-
-  // Handle image file selection
-  imageInput.onchange = async (e) => {
-    if (!currentGroupId) return alert("Select a group first.");
-    const file = e.target.files[0];
-    if (!file) return;
-    const fileName = `${currentGroupId}/${Date.now()}_${file.name}`;
-
-    sendMessageBtn.disabled = true;
-    imageBtn.disabled = true;
-
-    try {
-      // Upload image to Firebase Storage
-      const storageRef = storage.ref().child(fileName);
-      const snapshot = await storageRef.put(file);
-      const url = await snapshot.ref.getDownloadURL();
-
-      // Add message with image URL
-      await db.collection("groups").doc(currentGroupId).collection("messages").add({
-        url,
-        sender: currentUser.email,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        type: "image"
-      });
-    } catch (error) {
-      alert("Image upload failed: " + error.message);
-    }
-
-    sendMessageBtn.disabled = false;
-    imageBtn.disabled = false;
-    imageInput.value = "";
-  };
-
-  // Create group modal open/close handlers
-  openCreateGroupBtn.onclick = () => {
-    createGroupModal.classList.remove("hidden");
-    newGroupNameInput.value = "";
-    newGroupMembersInput.value = "";
-    createGroupMsg.textContent = "";
-  };
-  cancelCreateGroupBtn.onclick = () => {
-    createGroupModal.classList.add("hidden");
-  };
-
-  // Create group form submit
-  createGroupForm.onsubmit = async (e) => {
-    e.preventDefault();
-    createGroupMsg.textContent = "";
-    const name = newGroupNameInput.value.trim();
-    let membersRaw = newGroupMembersInput.value.trim();
-    if (!name) {
-      createGroupMsg.textContent = "Group name is required.";
-      return;
-    }
-    let members = membersRaw ? membersRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
-    if (!members.includes(currentUser.email)) {
-      members.push(currentUser.email);
-    }
-    // Remove duplicates
-    members = [...new Set(members)];
-
-    try {
-      await db.collection("groups").add({
-        name,
-        members,
-        creator: currentUser.email,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      });
-      createGroupModal.classList.add("hidden");
-    } catch (error) {
-      createGroupMsg.textContent = "Failed to create group: " + error.message;
-    }
-  };
-
-  // Leave group
-  leaveGroupBtn.onclick = async () => {
-    if (!currentGroupId) return;
-    const confirmLeave = confirm("Are you sure you want to leave this group?");
-    if (!confirmLeave) return;
-
-    try {
-      const groupRef = db.collection("groups").doc(currentGroupId);
-      const groupDoc = await groupRef.get();
-      if (!groupDoc.exists) {
-        alert("Group does not exist.");
-        return;
-      }
-      let groupData = groupDoc.data();
-      let members = groupData.members.filter(m => m !== currentUser.email);
-
-      if (members.length === 0) {
-        // If no members left, delete the group
-        await groupRef.delete();
+    // Auth listener
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        loginScreen.style.display = 'none';
+        app.style.display = 'flex';
+        loadGroups();
       } else {
-        await groupRef.update({ members });
+        loginScreen.style.display = 'flex';
+        app.style.display = 'none';
       }
-      currentGroupId = null;
-      currentChatTitle.textContent = "Select a group";
-      clearChat();
-      loadGroupDetails({ members: [] });
-      showGroupActionButtons(null);
-      updateSelectedGroupUI();
-    } catch (error) {
-      alert("Failed to leave group: " + error.message);
+    });
+
+    // Auth actions
+    loginBtn.onclick = () => {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      auth.signInWithEmailAndPassword(email, password).catch(alert);
+    };
+
+    signupBtn.onclick = () => {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      auth.createUserWithEmailAndPassword(email, password).catch(alert);
+    };
+
+    logoutBtn.onclick = () => auth.signOut();
+
+    // Create group
+    createGroupForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const name = groupNameInput.value.trim();
+      if (!name) return;
+
+      await db.collection('groups').add({
+        name,
+        members: [auth.currentUser.uid],
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      groupNameInput.value = '';
+    };
+
+    // Load groups
+    function loadGroups() {
+      db.collection('groups').orderBy('createdAt')
+        .onSnapshot(snapshot => {
+          groupList.innerHTML = '';
+          snapshot.forEach(doc => {
+            const group = doc.data();
+            const div = document.createElement('div');
+            div.textContent = group.name;
+            div.className = 'cursor-pointer bg-gray-700 rounded-full px-3 py-2 text-center hover:bg-gray-600';
+            div.onclick = () => selectGroup(doc.id, group.name);
+            groupList.appendChild(div);
+          });
+        });
     }
-  };
 
-  // Delete group (only creator)
-  deleteGroupBtn.onclick = async () => {
-    if (!currentGroupId) return;
-    const confirmDelete = confirm("Are you sure you want to delete this group? This action cannot be undone.");
-    if (!confirmDelete) return;
-
-    try {
-      // Delete all messages subcollection
-      const messagesRef = db.collection("groups").doc(currentGroupId).collection("messages");
-      const messagesSnapshot = await messagesRef.get();
-      const batch = db.batch();
-      messagesSnapshot.forEach(doc => batch.delete(doc.ref));
-      await batch.commit();
-
-      // Delete group doc
-      await db.collection("groups").doc(currentGroupId).delete();
-
-      currentGroupId = null;
-      currentChatTitle.textContent = "Select a group";
-      clearChat();
-      loadGroupDetails({ members: [] });
-      showGroupActionButtons(null);
-      updateSelectedGroupUI();
-    } catch (error) {
-      alert("Failed to delete group: " + error.message);
+    // Select group
+    function selectGroup(id, name) {
+      currentGroupId = id;
+      chatTitle.textContent = name;
+      db.collection('groups').doc(id).collection('messages').orderBy('createdAt')
+        .onSnapshot(snapshot => {
+          chatMessages.innerHTML = '';
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            const div = document.createElement('div');
+            div.className = 'bg-gray-800 p-2 rounded';
+            div.textContent = data.text;
+            chatMessages.appendChild(div);
+          });
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        });
     }
-  };
-</script>
+
+    // Send message
+    sendMessageBtn.onclick = async () => {
+      const text = messageInput.value.trim();
+      if (!text || !currentGroupId) return;
+      await db.collection('groups').doc(currentGroupId).collection('messages').add({
+        uid: auth.currentUser.uid,
+        text,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      messageInput.value = '';
+    };
+  </script>
 </body>
 </html>
