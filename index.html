@@ -53,7 +53,6 @@
   </div>
 
   <script>
-    // 🔧 Firebase Config
     const firebaseConfig = {
       apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
       authDomain: "chatting-fd641.firebaseapp.com",
@@ -67,7 +66,6 @@
     const auth = firebase.auth();
     const db = firebase.firestore();
 
-    // DOM refs
     const loginScreen = document.getElementById('loginScreen');
     const app = document.getElementById('app');
     const loginBtn = document.getElementById('login');
@@ -83,7 +81,6 @@
 
     let currentGroupId = null;
 
-    // Auth listener
     auth.onAuthStateChanged(user => {
       if (user) {
         loginScreen.style.display = 'none';
@@ -95,7 +92,6 @@
       }
     });
 
-    // Auth actions
     loginBtn.onclick = () => {
       const email = document.getElementById('email').value;
       const password = document.getElementById('password').value;
@@ -110,7 +106,6 @@
 
     logoutBtn.onclick = () => auth.signOut();
 
-    // Create group
     createGroupForm.onsubmit = async (e) => {
       e.preventDefault();
       const name = groupNameInput.value.trim();
@@ -125,7 +120,6 @@
       groupNameInput.value = '';
     };
 
-    // Load groups
     function loadGroups() {
       db.collection('groups').orderBy('createdAt')
         .onSnapshot(snapshot => {
@@ -141,7 +135,6 @@
         });
     }
 
-    // Select group
     function selectGroup(id, name) {
       currentGroupId = id;
       chatTitle.textContent = name;
@@ -159,7 +152,6 @@
         });
     }
 
-    // Send message
     sendMessageBtn.onclick = async () => {
       const text = messageInput.value.trim();
       if (!text || !currentGroupId) return;
