@@ -3,11 +3,59 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chat App - WhatsApp Style</title>
+    <title>Chat App - ONlyforHer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.min.js"></script>
+  </head>
+  <body class="min-h-screen bg-gray-100 dark:bg-gray-900 text-black dark:text-white flex flex-col items-center p-4">
+    <div id="auth-section" class="w-full max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+      <h1 class="text-xl font-bold mb-4">Chat Login</h1>
+      <input id="email" type="email" placeholder="Email" class="w-full border rounded p-2 mb-2 text-black" />
+      <input id="password" type="password" placeholder="Password" class="w-full border rounded p-2 mb-2 text-black" />
+      <button onclick="login()" class="bg-blue-500 text-white px-4 py-2 rounded w-full mb-2">Login</button>
+      <button onclick="signup()" class="bg-green-500 text-white px-4 py-2 rounded w-full mb-2">Sign Up</button>
+    </div>
+
+    <div id="chat-ui" class="hidden w-full max-w-2xl flex flex-col bg-white dark:bg-gray-800 rounded shadow-lg h-[85vh] mt-6">
+      <div id="groupsPage" class="flex flex-col h-full">
+        <div class="font-bold text-lg mb-2 flex justify-between items-center px-4 py-2 border-b dark:border-gray-700">
+          Groups
+          <span id="currentUserLabel" class="text-xs italic"></span>
+          <button id="logoutBtn" class="bg-red-600 text-white px-3 py-1 rounded ml-4">Logout</button>
+        </div>
+        <div id="groupsList" class="flex-1 overflow-y-auto p-4"></div>
+        <div class="flex gap-2 p-4 border-t dark:border-gray-700">
+          <input id="newGroupName" type="text" placeholder="New group name" class="flex-1 border rounded p-2 text-black" />
+          <button onclick="createGroup()" class="bg-green-600 text-white px-4 rounded">Create</button>
+        </div>
+      </div>
+
+      <div id="chatPage" class="hidden flex flex-col h-full">
+        <div class="flex items-center justify-between p-4 border-b dark:border-gray-700">
+          <button onclick="backToGroups()" class="text-blue-600 dark:text-blue-400">← Back to groups</button>
+          <h2 id="groupTitle" class="font-bold text-lg"></h2>
+          <div></div>
+        </div>
+        <div id="messages" class="flex-1 overflow-y-auto p-4 flex flex-col gap-1"></div>
+        <div class="p-4 border-t dark:border-gray-700 flex items-center gap-2">
+          <button id="emojiBtn" class="text-xl">😊</button>
+          <input id="messageInput" type="text" placeholder="Type a message" class="flex-1 border rounded p-2 text-black" autocomplete="off" />
+          <input type="file" id="imageInput" accept="image/*" onchange="previewImage(event)" class="hidden" />
+          <button onclick="document.getElementById('imageInput').click()" class="bg-gray-200 dark:bg-gray-700 rounded px-3 py-2">📷</button>
+          <button onclick="sendMessage()" class="bg-blue-600 text-white px-4 py-2 rounded">Send</button>
+        </div>
+      </div>
+    </div>
+
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+      import {
+        getAuth,
+        createUserWithEmailAndPassword,
+        signInWithEmailAndPassword,
+        onAuthStateChanged,
+        signOut
+      } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
       import {
         getFirestore,
         collection,
@@ -18,8 +66,7 @@
         doc,
         getDocs,
         deleteDoc,
-        serverTimestamp,
-        updateDoc
+        serverTimestamp
       } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
       import {
         getStorage,
@@ -39,38 +86,59 @@
       };
 
       const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
       const db = getFirestore(app);
       const storage = getStorage(app);
 
-      let currentUser = null;
-      let selectedImage = null;
       let currentGroupId = null;
+      let selectedImage = null;
 
-      window.onload = () => {
-        const loginBtn = document.getElementById("login-btn");
-        loginBtn.addEventListener("click", login);
+      const emailEl = document.getElementById("email");
+      const passEl = document.getElementById("password");
 
-        const picker = new EmojiButton();
-        const trigger = document.querySelector("#emojiBtn");
-        picker.on("emoji", emoji => {
-          document.getElementById("messageInput").value += emoji;
-        });
-        trigger.addEventListener("click", () => picker.togglePicker(trigger));
-      };
-
-      function login() {
-        const name = document.getElementById("username-input").value.trim();
-        if (!name) return alert("Please enter your name");
-
-        currentUser = {
-          uid: "user-" + Math.random().toString(36).substring(2, 10),
-          displayName: name
-        };
-        document.getElementById("login-section").style.display = "none";
-        document.getElementById("chat-ui").style.display = "flex";
-        document.getElementById("currentUserLabel").textContent = `Logged in as: ${currentUser.displayName}`;
-        loadGroups();
+      async function login() {
+        const email = emailEl.value;
+        const password = passEl.value;
+        try {
+          await signInWithEmailAndPassword(auth, email, password);
+        } catch (e) {
+          alert("Login failed: " + e.message);
+        }
       }
+
+      async function signup() {
+        const email = emailEl.value;
+        const password = passEl.value;
+        try {
+          await createUserWithEmailAndPassword(auth, email, password);
+        } catch (e) {
+          alert("Signup failed: " + e.message);
+        }
+      }
+
+      // Expose login/signup to global scope for inline onclick
+      window.login = login;
+      window.signup = signup;
+
+      onAuthStateChanged(auth, user => {
+        if (user) {
+          document.getElementById("auth-section").style.display = "none";
+          document.getElementById("chat-ui").classList.remove("hidden");
+          document.getElementById("currentUserLabel").textContent = `Logged in as: ${user.email}`;
+          loadGroups();
+        } else {
+          document.getElementById("auth-section").style.display = "block";
+          document.getElementById("chat-ui").classList.add("hidden");
+          currentGroupId = null;
+        }
+      });
+
+      async function logout() {
+        await signOut(auth);
+      }
+      window.logout = logout;
+
+      document.getElementById("logoutBtn").addEventListener("click", logout);
 
       function loadGroups() {
         const groupsList = document.getElementById("groupsList");
@@ -97,7 +165,7 @@
             deleteBtn.className = "ml-2 text-red-600 hover:text-red-800 text-sm";
             deleteBtn.onclick = e => {
               e.stopPropagation();
-              if (confirm(`Delete group \"${group.name}\"?`)) {
+              if (confirm(`Delete group "${group.name}"?`)) {
                 deleteGroup(docSnap.id);
               }
             };
@@ -144,66 +212,92 @@
       };
 
       window.sendMessage = async () => {
-        if (!currentGroupId) return alert("No group selected");
+        const user = auth.currentUser;
+        if (!currentGroupId || !user) return alert("No group or user selected");
         const text = document.getElementById("messageInput").value.trim();
-        if (!text && !selectedImage) return;
+        if (!text && !selectedImage) return alert("Type a message or select an image");
+
         let imageUrl = null;
         if (selectedImage) {
-          const storageRef = ref(storage, "images/" + Date.now() + "-" + selectedImage.name);
-          await uploadBytes(storageRef, selectedImage);
-          imageUrl = await getDownloadURL(storageRef);
+          const imageRef = ref(storage, `images/${Date.now()}_${selectedImage.name}`);
+          await uploadBytes(imageRef, selectedImage);
+          imageUrl = await getDownloadURL(imageRef);
           selectedImage = null;
+          document.getElementById("imageInput").value = "";
         }
+
         await addDoc(collection(db, "groups", currentGroupId, "messages"), {
-          uid: currentUser.uid,
-          username: currentUser.displayName,
+          sender: user.email,
           text: text || null,
-          imageUrl: imageUrl || null,
-          timestamp: serverTimestamp(),
-          readBy: [currentUser.uid]
+          imageUrl,
+          createdAt: serverTimestamp()
         });
+
         document.getElementById("messageInput").value = "";
-        document.getElementById("imageInput").value = "";
       };
 
       function listenToMessages(groupId) {
+        const messagesDiv = document.getElementById("messages");
+        messagesDiv.innerHTML = "Loading messages...";
         const messagesRef = collection(db, "groups", groupId, "messages");
-        const q = query(messagesRef, orderBy("timestamp", "asc"));
-        onSnapshot(q, snapshot => {
-          const messagesList = document.getElementById("messages");
-          messagesList.innerHTML = "";
-          snapshot.forEach(async docSnap => {
-            const msg = docSnap.data();
-            const div = document.createElement("div");
-            div.className =
-              "p-2 rounded-lg max-w-[70%] mb-2 flex flex-col " +
-              (msg.uid === currentUser.uid ? "bg-green-500 text-white self-end" : "bg-gray-300 text-black self-start");
-            div.innerHTML =
-              `<div class='text-xs mb-1 opacity-70'>${msg.username}${msg.readBy?.length > 1 ? ' ✅' : ''}</div>` +
-              (msg.text ? `<div>${msg.text}</div>` : "") +
-              (msg.imageUrl ? `<img src='${msg.imageUrl}' class='mt-2 rounded shadow max-w-[200px]'/>` : "");
+        const q = query(messagesRef, orderBy("createdAt"));
 
-            if (!msg.readBy?.includes(currentUser.uid)) {
-              await updateDoc(doc(messagesRef, docSnap.id), {
-                readBy: [...(msg.readBy || []), currentUser.uid]
-              });
+        onSnapshot(q, snapshot => {
+          messagesDiv.innerHTML = "";
+          snapshot.forEach(docSnap => {
+            const msg = docSnap.data();
+            const msgDiv = document.createElement("div");
+            msgDiv.className = "mb-2";
+
+            const sender = document.createElement("div");
+            sender.textContent = msg.sender;
+            sender.className = "text-xs font-semibold";
+
+            msgDiv.appendChild(sender);
+
+            if (msg.text) {
+              const textDiv = document.createElement("div");
+              textDiv.textContent = msg.text;
+              textDiv.className = "p-2 bg-blue-100 dark:bg-blue-700 rounded max-w-xs break-words";
+              msgDiv.appendChild(textDiv);
             }
 
-            messagesList.appendChild(div);
+            if (msg.imageUrl) {
+              const img = document.createElement("img");
+              img.src = msg.imageUrl;
+              img.alt = "Image";
+              img.className = "max-w-xs rounded mt-1 cursor-pointer";
+              img.onclick = () => window.open(msg.imageUrl, "_blank");
+              msgDiv.appendChild(img);
+            }
+
+            messagesDiv.appendChild(msgDiv);
           });
-          messagesList.scrollTop = messagesList.scrollHeight;
+
+          messagesDiv.scrollTop = messagesDiv.scrollHeight;
         });
       }
 
-      window.previewImage = event => {
-        selectedImage = event.target.files[0];
+      window.previewImage = e => {
+        selectedImage = e.target.files[0];
       };
+
+      // Emoji picker setup
+      const picker = new EmojiButton({
+        position: 'top-start',
+        theme: 'auto',
+      });
+
+      const emojiBtn = document.getElementById("emojiBtn");
+      const messageInput = document.getElementById("messageInput");
+
+      picker.on("emoji", emoji => {
+        messageInput.value += emoji;
+      });
+
+      emojiBtn.addEventListener("click", () => {
+        picker.togglePicker(emojiBtn);
+      });
     </script>
-  </head>
-  <body class="min-h-screen bg-gray-100 dark:bg-gray-900 text-black dark:text-white flex flex-col items-center p-4">
-    <div class="text-center text-lg text-red-500 mb-4 font-bold">
-      🛠️ The system is currently in developer mode. Some features might be experimental.
-    </div>
-    <!-- UI Code Remains Unchanged -->
   </body>
 </html>
