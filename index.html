@@ -1,94 +1,470 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Modern Firebase Chat</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
-  <script type="module">
-    // Firebase Config
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
-    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Firebase Chat App</title>
+<style>
+  /* Basic CSS reset & styling */
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    --bg: #f0f0f0;
+    --text: #222;
+    --primary: #007bff;
+    --secondary: #555;
+  }
+  body.dark {
+    --bg: #121212;
+    --text: #eee;
+    --primary: #3399ff;
+    --secondary: #bbb;
+  }
+  header {
+    background: var(--primary);
+    color: white;
+    padding: 1em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  #sign-in-btn, #sign-out-btn {
+    background: white; color: var(--primary);
+    border: none;
+    padding: 0.5em 1em;
+    cursor: pointer;
+    border-radius: 4px;
+    font-weight: bold;
+  }
+  #sign-out-btn { display:none; }
+  main {
+    max-width: 600px;
+    margin: 1em auto;
+    display: flex;
+    flex-direction: column;
+    height: 80vh;
+    border: 1px solid var(--secondary);
+    border-radius: 8px;
+    background: var(--bg);
+  }
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1em;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75em;
+    background: var(--bg);
+  }
+  .message {
+    background: #e2e2e2;
+    border-radius: 8px;
+    padding: 0.5em 0.75em;
+    max-width: 80%;
+    position: relative;
+    word-wrap: break-word;
+  }
+  body.dark .message {
+    background: #333;
+  }
+  .message.self {
+    align-self: flex-end;
+    background: var(--primary);
+    color: white;
+  }
+  .message .meta {
+    font-size: 0.75em;
+    color: var(--secondary);
+    margin-bottom: 0.25em;
+  }
+  .message .text {
+    white-space: pre-wrap;
+  }
+  .message .image {
+    max-width: 200px;
+    border-radius: 8px;
+    margin-top: 0.5em;
+    cursor: pointer;
+  }
+  .message .actions {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    font-size: 0.8em;
+    display: none;
+    gap: 8px;
+  }
+  .message.self:hover .actions {
+    display: flex;
+  }
+  #typing-indicator {
+    font-style: italic;
+    padding: 0 1em 0.5em 1em;
+    color: var(--secondary);
+    height: 1.2em;
+  }
+  #input-area {
+    display: flex;
+    padding: 0.5em;
+    gap: 0.5em;
+    border-top: 1px solid var(--secondary);
+  }
+  #input-message {
+    flex: 1;
+    padding: 0.5em;
+    font-size: 1em;
+    border: 1px solid var(--secondary);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--text);
+  }
+  #send-btn, #image-btn {
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 0 1em;
+    cursor: pointer;
+    font-weight: bold;
+  }
+  #image-input {
+    display: none;
+  }
+  #dark-mode-toggle {
+    cursor: pointer;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>Firebase Chat App</div>
+  <div>
+    <button id="dark-mode-toggle">🌙</button>
+    <button id="sign-in-btn">Sign In with Google</button>
+    <button id="sign-out-btn">Sign Out</button>
+  </div>
+</header>
 
-    const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_AUTH_DOMAIN",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_STORAGE_BUCKET",
-      messagingSenderId: "YOUR_MSG_ID",
-      appId: "YOUR_APP_ID"
-    };
+<main>
+  <div id="messages"></div>
+  <div id="typing-indicator"></div>
+  <div id="input-area" style="display:none;">
+    <textarea id="input-message" rows="1" placeholder="Type a message..."></textarea>
+    <button id="image-btn">📷</button>
+    <button id="send-btn">Send</button>
+    <input type="file" id="image-input" accept="image/*" />
+  </div>
+</main>
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth();
-    const db = getFirestore();
+<!-- Firebase SDKs -->
 
-    const provider = new GoogleAuthProvider();
-    const signInBtn = document.getElementById("signInBtn");
-    const chatContainer = document.getElementById("chatContainer");
-    const chatList = document.getElementById("chatList");
-    const messageForm = document.getElementById("messageForm");
-    const messageInput = document.getElementById("messageInput");
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 
-    signInBtn.addEventListener("click", async () => {
-      await signInWithPopup(auth, provider);
-    });
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 
-    onAuthStateChanged(auth, user => {
-      if (user) {
-        signInBtn.classList.add("hidden");
-        chatContainer.classList.remove("hidden");
-        const messagesRef = collection(db, "messages");
-        const q = query(messagesRef, orderBy("timestamp"));
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-        onSnapshot(q, snapshot => {
-          chatList.innerHTML = "";
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            const msgDiv = document.createElement("div");
-            msgDiv.className = "bg-gray-800 p-2 rounded-xl mb-2";
-            msgDiv.innerHTML = `<strong>${data.name}</strong>: ${data.text}`;
-            chatList.appendChild(msgDiv);
-          });
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+
+<script>
+  // Your Firebase config here
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_AUTH_DOMAIN",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_STORAGE_BUCKET",
+    messagingSenderId: "YOUR_MSG_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+  const storage = firebase.storage();
+
+  // UI Elements
+  const signInBtn = document.getElementById('sign-in-btn');
+  const signOutBtn = document.getElementById('sign-out-btn');
+  const messagesEl = document.getElementById('messages');
+  const inputArea = document.getElementById('input-area');
+  const inputMessage = document.getElementById('input-message');
+  const sendBtn = document.getElementById('send-btn');
+  const imageBtn = document.getElementById('image-btn');
+  const imageInput = document.getElementById('image-input');
+  const typingIndicator = document.getElementById('typing-indicator');
+  const darkModeToggle = document.getElementById('dark-mode-toggle');
+
+  // State
+  let currentUser = null;
+  let messagesListener = null;
+  let typingListener = null;
+  let typingTimeout;
+  let isTyping = false;
+  let editingMessageId = null;
+
+  // Auth
+  signInBtn.onclick = () => {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider).catch(console.error);
+  };
+  signOutBtn.onclick = () => auth.signOut();
+
+  auth.onAuthStateChanged(user => {
+    currentUser = user;
+    if(user) {
+      signInBtn.style.display = 'none';
+      signOutBtn.style.display = 'inline-block';
+      inputArea.style.display = 'flex';
+      startListeningToMessages();
+      subscribeToTyping();
+    } else {
+      signInBtn.style.display = 'inline-block';
+      signOutBtn.style.display = 'none';
+      inputArea.style.display = 'none';
+      messagesEl.innerHTML = "";
+      if(messagesListener) messagesListener();
+      if(typingListener) typingListener();
+    }
+  });
+
+  // Dark mode sync with system & toggle
+  function setDarkMode(enabled) {
+    if(enabled) {
+      document.body.classList.add('dark');
+      darkModeToggle.textContent = '☀️';
+    } else {
+      document.body.classList.remove('dark');
+      darkModeToggle.textContent = '🌙';
+    }
+  }
+  darkModeToggle.onclick = () => {
+    const dark = document.body.classList.contains('dark');
+    setDarkMode(!dark);
+  };
+  // Start with system preference
+  setDarkMode(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+    setDarkMode(e.matches);
+  });
+
+  // Create message element
+  function createMessageElement(doc) {
+    const data = doc.data();
+    const messageEl = document.createElement('div');
+    messageEl.classList.add('message');
+    if(data.uid === currentUser.uid) messageEl.classList.add('self');
+
+    // Meta (name + timestamp)
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const time = data.createdAt ? data.createdAt.toDate() : new Date();
+    meta.textContent = `${data.displayName || "Unknown"} - ${time.toLocaleTimeString()}`;
+
+    // Text content
+    const text = document.createElement('div');
+    text.className = 'text';
+    text.textContent = data.text || "";
+
+    // Image content
+    let image = null;
+    if(data.imageUrl) {
+      image = document.createElement('img');
+      image.src = data.imageUrl;
+      image.className = 'image';
+      image.alt = "Sent image";
+      image.onclick = () => window.open(data.imageUrl, '_blank');
+    }
+
+    messageEl.appendChild(meta);
+    if(data.edited) {
+      const editedMark = document.createElement('span');
+      editedMark.style.fontSize = '0.7em';
+      editedMark.style.marginLeft = '6px';
+      editedMark.style.color = 'gray';
+      editedMark.textContent = '(edited)';
+      meta.appendChild(editedMark);
+    }
+    messageEl.appendChild(text);
+    if(image) messageEl.appendChild(image);
+
+    // Actions: edit/delete for own messages
+    if(data.uid === currentUser.uid) {
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+
+      const editBtn = document.createElement('button');
+      editBtn.textContent = '✏️';
+      editBtn.title = "Edit";
+      editBtn.style.background = 'transparent';
+      editBtn.style.border = 'none';
+      editBtn.style.color = 'inherit';
+      editBtn.style.cursor = 'pointer';
+      editBtn.onclick = () => {
+        editingMessageId = doc.id;
+        inputMessage.value = data.text;
+        inputMessage.focus();
+        sendBtn.textContent = 'Update';
+      };
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = '🗑️';
+      deleteBtn.title = "Delete";
+      deleteBtn.style.background = 'transparent';
+      deleteBtn.style.border = 'none';
+      deleteBtn.style.color = 'inherit';
+      deleteBtn.style.cursor = 'pointer';
+      deleteBtn.onclick = async () => {
+        if(confirm("Delete this message?")) {
+          await db.collection('messages').doc(doc.id).delete();
+        }
+      };
+
+      actions.appendChild(editBtn);
+      actions.appendChild(deleteBtn);
+      messageEl.appendChild(actions);
+    }
+
+    return messageEl;
+  }
+
+  // Listen to messages collection
+  function startListeningToMessages() {
+    if(messagesListener) messagesListener();
+
+    messagesListener = db.collection('messages')
+      .orderBy('createdAt')
+      .limit(100)
+      .onSnapshot(snapshot => {
+        messagesEl.innerHTML = '';
+        snapshot.forEach(doc => {
+          const msgEl = createMessageElement(doc);
+          messagesEl.appendChild(msgEl);
         });
+        // Scroll to bottom
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      });
+  }
 
-        messageForm.addEventListener("submit", async (e) => {
-          e.preventDefault();
-          if (messageInput.value.trim() === "") return;
-          await addDoc(messagesRef, {
-            name: user.displayName,
-            text: messageInput.value,
-            timestamp: serverTimestamp()
-          });
-          messageInput.value = "";
-        });
+  // Typing indicator subscription
+  function subscribeToTyping() {
+    if(typingListener) typingListener();
+
+    const typingRef = db.collection("typingStatus").doc("globalTyping");
+
+    typingListener = typingRef.onSnapshot(doc => {
+      const data = doc.data() || {};
+      const typingUsers = Object.entries(data)
+        .filter(([uid, isTyping]) => isTyping && uid !== currentUser.uid)
+        .map(([uid]) => uid);
+
+      if(typingUsers.length > 0) {
+        typingIndicator.textContent = "Someone is typing...";
+      } else {
+        typingIndicator.textContent = "";
       }
     });
-  </script>
-</head>
-<body class="bg-gray-900 text-white h-screen flex overflow-hidden">
+  }
 
-  <!-- Sidebar -->
-  <aside class="w-16 bg-gray-800 flex flex-col items-center py-4 space-y-6">
-    <button id="signInBtn" class="text-white bg-blue-600 px-2 py-1 rounded">Sign In</button>
-  </aside>
+  // Send message
+  async function sendMessage(text = "", imageUrl = "") {
+    if(!text && !imageUrl) return;
 
-  <!-- Chat Layout -->
-  <div id="chatContainer" class="hidden flex-1 flex flex-col">
-    <!-- Header -->
-    <header class="p-4 border-b border-gray-700 bg-gray-850">
-      <h2 class="text-xl font-bold">Group Chat</h2>
-    </header>
+    if(editingMessageId) {
+      // Update existing message
+      await db.collection("messages").doc(editingMessageId).update({
+        text,
+        edited: true,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      editingMessageId = null;
+      sendBtn.textContent = "Send";
+      inputMessage.value = "";
+      return;
+    }
 
-    <!-- Messages -->
-    <div id="chatList" class="flex-1 overflow-y-auto p-4 space-y-2"></div>
+    await db.collection("messages").add({
+      uid: currentUser.uid,
+      displayName: currentUser.displayName,
+      photoURL: currentUser.photoURL,
+      text,
+      imageUrl,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      readBy: [currentUser.uid],
+      reactions: {},
+    });
+    inputMessage.value = "";
+  }
 
-    <!-- Message Input -->
-    <form id="messageForm" class="p-4 border-t border-gray-700 bg-gray-850">
-      <input id="messageInput" type="text" placeholder="Type your message..." class="w-full p-3 rounded-lg bg-gray-800 text-white placeholder-gray-400 outline-none">
-    </form>
-  </div>
+  // Typing status
+  inputMessage.addEventListener('input', () => {
+    if(!isTyping) {
+      isTyping = true;
+      setTypingStatus(true);
+    }
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+      isTyping = false;
+      setTypingStatus(false);
+    }, 1500);
+  });
+
+  async function setTypingStatus(status) {
+    const typingRef = db.collection("typingStatus").doc("globalTyping");
+    const field = currentUser.uid;
+    await typingRef.set({ [field]: status }, { merge: true });
+  }
+
+  // Send button click
+  sendBtn.onclick = () => {
+    const text = inputMessage.value.trim();
+    if(text || editingMessageId) {
+      sendMessage(text);
+    }
+  };
+
+  // Enter to send (no shift)
+  inputMessage.addEventListener("keydown", e => {
+    if(e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendBtn.click();
+    }
+  });
+
+  // Image button click triggers file input
+  imageBtn.onclick = () => imageInput.click();
+
+  // Handle image upload
+  imageInput.onchange = async e => {
+    const file = e.target.files[0];
+    if(!file) return;
+
+    const storageRef = storage.ref();
+    const fileRef = storageRef.child(`images/${Date.now()}_${file.name}`);
+
+    const uploadTask = fileRef.put(file);
+
+    uploadTask.on('state_changed', 
+      null,
+      error => alert("Upload failed: " + error.message),
+      async () => {
+        const downloadURL = await fileRef.getDownloadURL();
+        sendMessage("", downloadURL);
+      }
+    );
+
+    imageInput.value = "";
+  };
+
+  // Clear typing on unload
+  window.addEventListener("beforeunload", () => {
+    if(currentUser) setTypingStatus(false);
+  });
+</script>
 
 </body>
 </html>
