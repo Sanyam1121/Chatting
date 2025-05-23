@@ -80,6 +80,7 @@
     const chatTitle = document.getElementById('chatTitle');
 
     let currentGroupId = null;
+    let unsubscribeMessages = null;
 
     auth.onAuthStateChanged(user => {
       if (user) {
@@ -110,13 +111,12 @@
       e.preventDefault();
       const name = groupNameInput.value.trim();
       if (!name) return;
-
       await db.collection('groups').add({
         name,
+        creator: auth.currentUser.uid,
         members: [auth.currentUser.uid],
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
-
       groupNameInput.value = '';
     };
 
@@ -127,9 +127,27 @@
           snapshot.forEach(doc => {
             const group = doc.data();
             const div = document.createElement('div');
-            div.textContent = group.name;
-            div.className = 'cursor-pointer bg-gray-700 rounded-full px-3 py-2 text-center hover:bg-gray-600';
-            div.onclick = () => selectGroup(doc.id, group.name);
+            div.className = 'flex justify-between items-center bg-gray-700 rounded px-3 py-2 hover:bg-gray-600';
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = group.name;
+            nameSpan.className = 'cursor-pointer flex-1';
+            nameSpan.onclick = () => selectGroup(doc.id, group.name);
+
+            div.appendChild(nameSpan);
+
+            if (group.creator === auth.currentUser.uid) {
+              const delBtn = document.createElement('button');
+              delBtn.textContent = '🗑️';
+              delBtn.className = 'ml-2 text-red-400 hover:text-red-600';
+              delBtn.onclick = async (e) => {
+                e.stopPropagation();
+                if (confirm(`Delete group "${group.name}"?`)) {
+                  await db.collection('groups').doc(doc.id).delete();
+                }
+              };
+              div.appendChild(delBtn);
+            }
+
             groupList.appendChild(div);
           });
         });
@@ -138,14 +156,19 @@
     function selectGroup(id, name) {
       currentGroupId = id;
       chatTitle.textContent = name;
-      db.collection('groups').doc(id).collection('messages').orderBy('createdAt')
+
+      if (unsubscribeMessages) unsubscribeMessages();
+
+      unsubscribeMessages = db.collection('groups').doc(id).collection('messages')
+        .orderBy('createdAt')
         .onSnapshot(snapshot => {
           chatMessages.innerHTML = '';
           snapshot.forEach(doc => {
             const data = doc.data();
+            const time = data.createdAt?.toDate().toLocaleTimeString();
             const div = document.createElement('div');
             div.className = 'bg-gray-800 p-2 rounded';
-            div.textContent = data.text;
+            div.textContent = `[${time}] ${data.email}: ${data.text}`;
             chatMessages.appendChild(div);
           });
           chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -157,6 +180,7 @@
       if (!text || !currentGroupId) return;
       await db.collection('groups').doc(currentGroupId).collection('messages').add({
         uid: auth.currentUser.uid,
+        email: auth.currentUser.email,
         text,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
