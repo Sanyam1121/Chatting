@@ -1,237 +1,136 @@
-Got it! I’ll add these features **without changing your existing code structure or UI**:
-
-* Typing Indicators
-* Read Receipts
-* Message Edit & Delete
-* Image Attachments
-* Emoji Picker
-* File Attachments
-* Group Member Management (add/remove users)
-
----
-
-This will require:
-
-1. Adding new fields in your message documents (like `isRead`, `edited`, `typing` status per user, message `type` for text/image/file).
-2. UI buttons for edit/delete next to each message.
-3. File upload input for images/files.
-4. Emoji picker integrated in message input.
-5. UI for adding/removing members in group details panel.
-6. Real-time updates for typing indicators and read receipts.
-
----
-
-I’ll proceed to write the **full updated code** in a single HTML file with your current code + all features added and explained in comments.
-
-Please hold on a moment.
-
-
-```html
 <!DOCTYPE html>
 <html lang="en" >
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Firebase Group & DM Chat with All Features</title>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <title>Firebase Chat App</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    /* Scrollbar for chat */
-    #chat-messages::-webkit-scrollbar {
-      width: 8px;
-    }
-    #chat-messages::-webkit-scrollbar-thumb {
-      background-color: #4B5563;
-      border-radius: 4px;
-    }
-    #chat-messages::-webkit-scrollbar-track {
-      background-color: #1F2937;
-    }
-  </style>
 </head>
-<body class="bg-gray-900 text-gray-300 flex flex-col min-h-screen">
+<body class="bg-gray-900 text-white">
 
-<!--
-  All features added WITHOUT changing your existing layout or breaking current behavior.
-  Features:
-  - Typing indicator (shows "User is typing..." in chat header)
-  - Read receipts (small check marks per message)
-  - Edit & Delete message (edit icon, delete icon on hover)
-  - Image and file attachments with preview
-  - Emoji picker integrated
-  - Group member management (add/remove members)
--->
-
-<div id="app" class="flex flex-grow h-screen">
-
-  <!-- Sidebar: Groups & DMs -->
-  <aside class="w-80 border-r border-gray-700 flex flex-col">
-    <div class="p-4 border-b border-gray-700 flex justify-between items-center">
-      <h2 class="text-xl font-semibold">Groups & DMs</h2>
-      <button id="btn-new-group" class="text-sm bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded">New Group</button>
-    </div>
-
-    <div class="flex-grow overflow-y-auto px-2">
-
-      <section>
-        <h3 class="uppercase text-xs font-bold text-gray-400 mb-1 mt-3">Groups</h3>
-        <ul id="group-list" class="space-y-1">
-          <!-- Groups list rendered here -->
-        </ul>
-      </section>
-
-      <section>
-        <h3 class="uppercase text-xs font-bold text-gray-400 mb-1 mt-6">Direct Messages</h3>
-        <button id="btn-new-dm" class="text-sm bg-green-600 hover:bg-green-700 px-2 py-1 rounded mb-2">New DM</button>
-        <ul id="dm-list" class="space-y-1">
-          <!-- DM list rendered here -->
-        </ul>
-      </section>
-    </div>
-  </aside>
-
-  <!-- Main Chat Area -->
-  <main class="flex-grow flex flex-col bg-gray-800">
-    <!-- Chat Header -->
-    <header class="flex items-center justify-between p-4 border-b border-gray-700 bg-gray-900">
-      <div>
-        <button id="btn-back-to-groups" class="mr-4 text-gray-400 hover:text-gray-200 hidden" title="Back to Groups">
-          &#8592;
-        </button>
-        <h2 id="chat-title" class="text-lg font-semibold">Select a group or DM</h2>
-        <div id="typing-indicator" class="text-xs text-green-400 italic mt-0.5 h-4"></div>
-      </div>
-      <div id="chat-header-actions" class="flex items-center space-x-2">
-        <!-- Group member management only visible on group chats -->
-        <button id="btn-manage-members" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded hidden" title="Manage Members">
-          Members
-        </button>
-      </div>
-    </header>
-
-    <!-- Messages List -->
-    <section id="chat-messages" class="flex-grow overflow-y-auto px-4 py-3 space-y-2 bg-gray-800">
-      <!-- Messages appended here -->
-    </section>
-
-    <!-- Message Input -->
-    <footer class="p-4 border-t border-gray-700 bg-gray-900 flex flex-col space-y-2">
-      <div class="flex items-center space-x-2">
-        <button id="btn-emoji" title="Emoji picker" class="text-yellow-400 text-xl hover:text-yellow-300">😊</button>
-        <input
-          id="message-input"
-          type="text"
-          placeholder="Type your message..."
-          class="flex-grow rounded bg-gray-700 text-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600"
-          disabled
-          autocomplete="off"
-        />
-        <input id="file-input" type="file" class="hidden" />
-        <button id="btn-attach-file" title="Attach Image or File" class="text-blue-400 hover:text-blue-300 text-2xl">📎</button>
-        <button
-          id="btn-send"
-          class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded disabled:opacity-50"
-          disabled
-          title="Send"
-        >
-          Send
-        </button>
-      </div>
-      <div id="file-preview" class="flex space-x-2 overflow-x-auto"></div>
-    </footer>
-  </main>
-
-  <!-- Modal: New Group Creation -->
-  <div
-    id="modal-new-group"
-    class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden"
-  >
-    <div class="bg-gray-900 rounded p-6 w-96 max-w-full">
-      <h3 class="text-lg font-semibold mb-4 text-gray-200">Create New Group</h3>
-      <input
-        id="new-group-name"
-        type="text"
-        placeholder="Group Name"
-        class="w-full p-2 rounded mb-4 bg-gray-700 text-gray-200 focus:outline-none"
-      />
-      <div class="flex justify-end space-x-3">
-        <button id="cancel-new-group" class="px-3 py-1 bg-gray-600 rounded hover:bg-gray-500">
-          Cancel
-        </button>
-        <button id="create-new-group" class="px-3 py-1 bg-blue-600 rounded hover:bg-blue-700">
-          Create
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal: New DM -->
-  <div
-    id="modal-new-dm"
-    class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden"
-  >
-    <div class="bg-gray-900 rounded p-6 w-96 max-w-full">
-      <h3 class="text-lg font-semibold mb-4 text-gray-200">Start New DM</h3>
-      <input
-        id="new-dm-email"
-        type="email"
-        placeholder="User Email"
-        class="w-full p-2 rounded mb-4 bg-gray-700 text-gray-200 focus:outline-none"
-      />
-      <div id="new-dm-error" class="text-red-500 text-sm mb-2"></div>
-      <div class="flex justify-end space-x-3">
-        <button id="cancel-new-dm" class="px-3 py-1 bg-gray-600 rounded hover:bg-gray-500">
-          Cancel
-        </button>
-        <button id="create-new-dm" class="px-3 py-1 bg-green-600 rounded hover:bg-green-700">
-          Start
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal: Manage Group Members -->
-  <div
-    id="modal-manage-members"
-    class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden"
-  >
-    <div class="bg-gray-900 rounded p-6 w-96 max-w-full max-h-[80vh] overflow-y-auto">
-      <h3 class="text-lg font-semibold mb-4 text-gray-200">Manage Group Members</h3>
-      <div class="mb-4">
-        <label for="add-member-email" class="block mb-1">Add Member by Email</label>
-        <input
-          id="add-member-email"
-          type="email"
-          placeholder="User Email"
-          class="w-full p-2 rounded bg-gray-700 text-gray-200 focus:outline-none"
-        />
-        <div id="add-member-error" class="text-red-500 text-sm mt-1"></div>
-        <button id="btn-add-member" class="mt-2 px-3 py-1 bg-blue-600 rounded hover:bg-blue-700">
-          Add Member
-        </button>
-      </div>
-      <h4 class="font-semibold mb-2">Current Members</h4>
-      <ul id="group-members-list" class="space-y-1 max-h-48 overflow-y-auto">
-        <!-- Members list -->
-      </ul>
-      <div class="flex justify-end mt-4">
-        <button id="close-manage-members" class="px-3 py-1 bg-gray-600 rounded hover:bg-gray-500">
-          Close
-        </button>
-      </div>
-    </div>
-  </div>
-
+<!-- Login Container -->
+<div id="login-container" class="flex flex-col items-center justify-center min-h-screen p-4">
+  <h1 class="text-3xl font-bold mb-6">Login to Chat</h1>
+  <form id="login-form" class="flex flex-col w-full max-w-sm space-y-4 bg-gray-800 p-6 rounded">
+    <input
+      type="email"
+      id="login-email"
+      placeholder="Email"
+      required
+      class="p-3 rounded bg-gray-700 text-white focus:outline-none"
+    />
+    <input
+      type="password"
+      id="login-password"
+      placeholder="Password"
+      required
+      class="p-3 rounded bg-gray-700 text-white focus:outline-none"
+    />
+    <button type="submit" class="bg-blue-600 hover:bg-blue-700 rounded p-3 font-semibold">Login</button>
+    <p id="login-error" class="text-red-500 mt-2"></p>
+  </form>
 </div>
 
-<!-- Emoji Picker library (lightweight vanilla JS) -->
-<script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/emoji-button.min.js"></script>
+<!-- Chat Container -->
+<div id="chat-container" class="hidden min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-gray-800 p-4 flex items-center justify-between">
+    <h2 id="display-name" class="text-xl font-semibold"></h2>
+    <button id="sign-out-btn" class="bg-red-600 hover:bg-red-700 px-3 py-1 rounded">Sign Out</button>
+  </header>
+
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- Sidebar: Groups and DMs -->
+    <aside class="w-64 bg-gray-800 flex flex-col p-2">
+      <div class="mb-4 flex justify-between items-center">
+        <h3 class="font-bold text-lg">Groups</h3>
+        <button id="create-group-btn" title="Create New Group" class="text-green-400 hover:text-green-600 font-bold text-xl">+</button>
+      </div>
+      <div id="groups-list" class="flex flex-col space-y-1 overflow-y-auto max-h-48"></div>
+
+      <div class="mt-6 mb-2 flex justify-between items-center">
+        <h3 class="font-bold text-lg">Direct Messages</h3>
+        <button id="create-dm-btn" title="New DM" class="text-green-400 hover:text-green-600 font-bold text-xl">+</button>
+      </div>
+      <div id="dms-list" class="flex flex-col space-y-1 overflow-y-auto max-h-48"></div>
+    </aside>
+
+    <!-- Chat area -->
+    <main class="flex-1 flex flex-col bg-gray-900">
+      <!-- Chat header -->
+      <div id="chat-header" class="bg-gray-800 p-3 flex justify-between items-center border-b border-gray-700">
+        <button id="btn-back-to-groups" class="text-blue-400 hover:text-blue-600 font-semibold">Back</button>
+        <h3 id="chat-title" class="font-semibold text-lg truncate max-w-xs"></h3>
+        <button id="btn-manage-members" class="text-yellow-400 hover:text-yellow-600 font-semibold">Manage Members</button>
+      </div>
+
+      <!-- Messages list -->
+      <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4"></div>
+
+      <!-- Typing indicator -->
+      <div id="typing-indicator" class="h-5 px-4 text-sm text-gray-400"></div>
+
+      <!-- Message input -->
+      <div class="p-3 bg-gray-800 flex items-center space-x-2">
+        <textarea
+          id="message-input"
+          rows="2"
+          placeholder="Type a message..."
+          class="flex-grow p-2 rounded bg-gray-700 resize-none text-white focus:outline-none"
+        ></textarea>
+        <input type="file" id="file-input" multiple class="hidden" />
+        <button id="btn-attach" title="Attach files" class="text-gray-400 hover:text-gray-200 text-2xl">📎</button>
+        <button id="btn-send" disabled class="bg-blue-600 hover:bg-blue-700 rounded px-4 py-2 font-semibold">Send</button>
+      </div>
+
+      <!-- Attached files preview -->
+      <div id="file-preview" class="p-2 bg-gray-700 overflow-x-auto flex space-x-2"></div>
+    </main>
+
+    <!-- Right panel for chat details -->
+    <aside class="w-72 bg-gray-800 p-4 border-l border-gray-700 overflow-y-auto hidden" id="chat-details-panel">
+      <h4 class="text-xl font-semibold mb-4">Chat Details</h4>
+      <div id="chat-details-content">
+        <!-- Dynamic content: shared files, links, participants -->
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- Manage Members Modal -->
+<div
+  id="members-modal"
+  class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden z-50"
+>
+  <div class="bg-gray-900 rounded-lg p-6 w-96 max-w-full">
+    <h3 class="text-2xl font-semibold mb-4">Manage Members</h3>
+    <div id="members-list" class="max-h-48 overflow-y-auto mb-4"></div>
+    <div class="flex space-x-2">
+      <input
+        type="email"
+        id="add-member-input"
+        placeholder="Add member by email"
+        class="flex-grow p-2 rounded bg-gray-700 text-white focus:outline-none"
+      />
+      <button id="add-member-btn" class="bg-green-600 hover:bg-green-700 px-4 rounded font-semibold">Add</button>
+    </div>
+    <button
+      id="close-modal-btn"
+      class="mt-4 bg-red-600 hover:bg-red-700 w-full py-2 rounded font-semibold"
+    >
+      Close
+    </button>
+  </div>
+</div>
 
 <script>
-  // Your Firebase config here
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  // Firebase config - replace these with your actual config values
+ // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
   authDomain: "chatting-fd641.firebaseapp.com",
@@ -241,600 +140,70 @@ const firebaseConfig = {
   appId: "1:535384451291:web:828f60686d81be018b44fe",
   measurementId: "G-RKS4CFZPJ4"
 };
-
+  // Initialize Firebase
   firebase.initializeApp(firebaseConfig);
   const auth = firebase.auth();
   const db = firebase.firestore();
 
   // DOM Elements
-  const groupListEl = document.getElementById('group-list');
-  const dmListEl = document.getElementById('dm-list');
-  const chatTitleEl = document.getElementById('chat-title');
-  const chatMessagesEl = document.getElementById('chat-messages');
+  const loginContainer = document.getElementById('login-container');
+  const loginForm = document.getElementById('login-form');
+  const loginEmail = document.getElementById('login-email');
+  const loginPassword = document.getElementById('login-password');
+  const loginError = document.getElementById('login-error');
+
+  const chatContainer = document.getElementById('chat-container');
+  const displayNameEl = document.getElementById('display-name');
+  const signOutBtn = document.getElementById('sign-out-btn');
+
+  const groupsListEl = document.getElementById('groups-list');
+  const dmsListEl = document.getElementById('dms-list');
+  const createGroupBtn = document.getElementById('create-group-btn');
+  const createDmBtn = document.getElementById('create-dm-btn');
+
+  const chatHeader = document.getElementById('chat-header');
+  const chatTitle = document.getElementById('chat-title');
+  const btnBackToGroups = document.getElementById('btn-back-to-groups');
+  const btnManageMembers = document.getElementById('btn-manage-members');
+
+  const messagesContainer = document.getElementById('messages-container');
+  const typingIndicatorEl = document.getElementById('typing-indicator');
+
   const messageInputEl = document.getElementById('message-input');
   const btnSend = document.getElementById('btn-send');
-  const btnBackToGroups = document.getElementById('btn-back-to-groups');
-  const typingIndicatorEl = document.getElementById('typing-indicator');
-  const btnNewGroup = document.getElementById('btn-new-group');
-  const modalNewGroup = document.getElementById('modal-new-group');
-  const newGroupNameInput = document.getElementById('new-group-name');
-  const createNewGroupBtn = document.getElementById('create-new-group');
-  const cancelNewGroupBtn = document.getElementById('cancel-new-group');
-  const btnNewDm = document.getElementById('btn-new-dm');
-  const modalNewDm = document.getElementById('modal-new-dm');
-  const newDmEmailInput = document.getElementById('new-dm-email');
-  const createNewDmBtn = document.getElementById('create-new-dm');
-  const cancelNewDmBtn = document.getElementById('cancel-new-dm');
-  const newDmErrorEl = document.getElementById('new-dm-error');
-  const btnManageMembers = document.getElementById('btn-manage-members');
-  const modalManageMembers = document.getElementById('modal-manage-members');
-  const groupMembersListEl = document.getElementById('group-members-list');
-  const addMemberEmailInput = document.getElementById('add-member-email');
-  const btnAddMember = document.getElementById('btn-add-member');
-  const addMemberErrorEl = document.getElementById('add-member-error');
-  const closeManageMembersBtn = document.getElementById('close-manage-members');
-  const btnEmoji = document.getElementById('btn-emoji');
-  const fileInput = document.getElementById('file-input');
-  const btnAttachFile = document.getElementById('btn-attach-file');
+  const btnAttach = document.getElementById('btn-attach');
+  const fileInputEl = document.getElementById('file-input');
   const filePreviewEl = document.getElementById('file-preview');
 
-  // Emoji Picker init
-  const picker = new EmojiButton({
-    position: 'top-end',
-    theme: 'dark',
-  });
+  const membersModal = document.getElementById('members-modal');
+  const membersListEl = document.getElementById('members-list');
+  const addMemberInput = document.getElementById('add-member-input');
+  const addMemberBtn = document.getElementById('add-member-btn');
+  const closeModalBtn = document.getElementById('close-modal-btn');
 
-  picker.on('emoji', emoji => {
-    messageInputEl.value += emoji;
-    messageInputEl.focus();
-    checkSendButton();
-  });
+  const chatDetailsPanel = document.getElementById('chat-details-panel');
+  const chatDetailsContent = document.getElementById('chat-details-content');
 
-  btnEmoji.addEventListener('click', () => {
-    picker.togglePicker(btnEmoji);
-  });
-
-  btnAttachFile.addEventListener('click', () => {
-    fileInput.click();
-  });
-
-  // Globals
+  // State
   let currentUser = null;
+  let usersCache = {}; // email -> displayName or email
+  let selectedGroup = null; // {id, name, members}
+  let selectedDM = null; // {id, participants}
+  let messagesUnsub = null;
   let groupsUnsub = null;
   let dmsUnsub = null;
-  let messagesUnsub = null;
-  let typingTimeout = null;
-  let typingDocRef = null; // Firestore doc for typing status
-  let selectedGroup = null; // { id, name, members }
-  let selectedDM = null; // { id, participants }
-  let usersCache = {}; // cache of user emails to names
+  let typingUnsub = null;
+  let isEditing = false;
   let editingMessageId = null;
-  let attachedFiles = []; // Array of {file, url, name, type} for preview and upload
 
-  // Utility: Format timestamp
-  function formatTimestamp(timestamp) {
-    if (!timestamp) return '';
-    const date = timestamp.toDate();
-    const now = new Date();
-    const diff = now - date;
-    if (diff < 60000) return 'Just now';
-    return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-  }
-
-  // Utility: Escape HTML to prevent XSS (for message text)
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  // Auth state change
-  auth.onAuthStateChanged(user => {
-    if (user) {
-      currentUser = user;
-      loadUsersCache().then(() => {
-        setupGroupListeners();
-        setupDmListeners();
-        resetSelection();
-        showLoggedInUI();
-      });
-    } else {
-      currentUser = null;
-      showLoginUI();
-      cleanupListeners();
-      clearChat();
-    }
-  });
-
-  // Load users email->name cache for DM display & member management
-  async function loadUsersCache() {
-    usersCache = {};
-    const snapshot = await db.collection('users').get();
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      if (data.email) usersCache[data.email] = data.displayName || data.email;
-    });
-  }
-
-  // Show/hide UI based on auth
-  function showLoginUI() {
-    document.getElementById('app').style.display = 'none';
-    alert('Please sign in via Firebase Auth (implement your own UI or quick sign-in)');
-  }
-
-  function showLoggedInUI() {
-    document.getElementById('app').style.display = 'flex';
-  }
-
-  // Cleanup listeners
-  function cleanupListeners() {
-    if (groupsUnsub) groupsUnsub();
-    if (dmsUnsub) dmsUnsub();
-    if (messagesUnsub) messagesUnsub();
-    if (typingDocRef) {
-      setTypingStatus(false);
-      typingDocRef = null;
-    }
-  }
-
-  // Clear chat area
-  function clearChat() {
-    chatTitleEl.textContent = 'Select a group or DM';
-    chatMessagesEl.innerHTML = '';
-    messageInputEl.value = '';
-    messageInputEl.disabled = true;
-    btnSend.disabled = true;
-    btnBackToGroups.classList.add('hidden');
-    btnManageMembers.classList.add('hidden');
-    typingIndicatorEl.textContent = '';
-    editingMessageId = null;
-    attachedFiles = [];
-    filePreviewEl.innerHTML = '';
-  }
-
-  // Reset selection
-  function resetSelection() {
-    selectedGroup = null;
-    selectedDM = null;
-    clearChat();
-  }
-
-  // Setup Groups listener
-  function setupGroupListeners() {
-    if (groupsUnsub) groupsUnsub();
-    groupsUnsub = db.collection('groups')
-      .where('members', 'array-contains', currentUser.email)
-      .orderBy('createdAt', 'desc')
-      .onSnapshot(snapshot => {
-        groupListEl.innerHTML = '';
-        snapshot.forEach(doc => {
-          const group = { id: doc.id, ...doc.data() };
-          const li = document.createElement('li');
-          li.className = 'p-2 rounded cursor-pointer hover:bg-gray-700';
-          li.textContent = group.name;
-          if (selectedGroup && selectedGroup.id === group.id) {
-            li.classList.add('bg-blue-600');
-          }
-          li.addEventListener('click', () => {
-            selectGroup(group);
-          });
-          groupListEl.appendChild(li);
-        });
-      });
-  }
-
-  // Setup DMs listener
-  function setupDmListeners() {
-    if (dmsUnsub) dmsUnsub();
-    dmsUnsub = db.collection('private_chats')
-      .where('participants', 'array-contains', currentUser.email)
-      .orderBy('createdAt', 'desc')
-      .onSnapshot(snapshot => {
-        dmListEl.innerHTML = '';
-        snapshot.forEach(doc => {
-          const dm = { id: doc.id, ...doc.data() };
-          const otherEmails = dm.participants.filter(e => e !== currentUser.email);
-          const displayName = otherEmails.map(e => usersCache[e] || e).join(', ');
-          const li = document.createElement('li');
-          li.className = 'p-2 rounded cursor-pointer hover:bg-gray-700';
-          li.textContent = displayName;
-          if (selectedDM && selectedDM.id === dm.id) {
-            li.classList.add('bg-green-600');
-          }
-          li.addEventListener('click', () => {
-            selectDM(dm);
-          });
-          dmListEl.appendChild(li);
-        });
-      });
-  }
-
-  // Select a group chat
-  function selectGroup(group) {
-    if (messagesUnsub) messagesUnsub();
-    selectedGroup = group;
-    selectedDM = null;
-    chatTitleEl.textContent = group.name;
-    btnBackToGroups.classList.add('hidden');
-    btnManageMembers.classList.remove('hidden');
-    clearChatMessages();
-    enableChatInput(true);
-    loadGroupMessages(group.id);
-    setupTypingIndicatorForGroup(group.id);
-  }
-
-  // Select a DM chat
-  function selectDM(dm) {
-    if (messagesUnsub) messagesUnsub();
-    selectedDM = dm;
-    selectedGroup = null;
-    const otherEmails = dm.participants.filter(e => e !== currentUser.email);
-    const displayName = otherEmails.map(e => usersCache[e] ||
-    = true;
-    btnManageMembers.classList.add('hidden');
-    btnBackToGroups.classList.add('hidden');
-    typingIndicatorEl.textContent = '';
-    attachedFiles = [];
-    filePreviewEl.innerHTML = '';
-  }
-
-  // Reset selection (no chat opened)
-  function resetSelection() {
-    selectedGroup = null;
-    selectedDM = null;
-    clearChat();
-  }
-
-  // Setup groups listener
-  function setupGroupListeners() {
-    if (groupsUnsub) groupsUnsub();
-    groupsUnsub = db.collection('groups')
-      .where('members', 'array-contains', currentUser.email)
-      .orderBy('createdAt', 'desc')
-      .onSnapshot(snapshot => {
-        groupListEl.innerHTML = '';
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          const li = document.createElement('li');
-          li.className = 'cursor-pointer rounded px-2 py-1 hover:bg-gray-700 flex justify-between items-center';
-          li.textContent = data.name || 'Unnamed Group';
-          li.title = data.name || 'Unnamed Group';
-
-          // Show number of members small badge
-          const badge = document.createElement('span');
-          badge.className = 'text-xs bg-gray-600 rounded px-1 ml-2';
-          badge.textContent = data.members.length;
-          li.appendChild(badge);
-
-          li.onclick = () => openGroupChat(doc.id, data);
-          groupListEl.appendChild(li);
-        });
-      });
-  }
-
-  // Setup DMs listener
-  function setupDmListeners() {
-    if (dmsUnsub) dmsUnsub();
-    dmsUnsub = db.collection('dms')
-      .where('participants', 'array-contains', currentUser.email)
-      .orderBy('createdAt', 'desc')
-      .onSnapshot(snapshot => {
-        dmListEl.innerHTML = '';
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          const otherEmails = data.participants.filter(e => e !== currentUser.email);
-          const displayName = otherEmails.map(email => usersCache[email] || email).join(', ');
-
-          const li = document.createElement('li');
-          li.className = 'cursor-pointer rounded px-2 py-1 hover:bg-gray-700';
-          li.textContent = displayName || 'Unknown User';
-          li.title = displayName || 'Unknown User';
-
-          li.onclick = () => openDmChat(doc.id, data);
-          dmListEl.appendChild(li);
-        });
-      });
-  }
-
-  // Open group chat
-  function openGroupChat(groupId, groupData) {
-    if (messagesUnsub) messagesUnsub();
-    selectedGroup = { id: groupId, ...groupData };
-    selectedDM = null;
-    chatTitleEl.textContent = groupData.name || 'Unnamed Group';
-    btnManageMembers.classList.remove('hidden');
-    btnBackToGroups.classList.remove('hidden');
-    messageInputEl.disabled = false;
-    btnSend.disabled = true;
-    messageInputEl.value = '';
-    attachedFiles = [];
-    filePreviewEl.innerHTML = '';
-    loadMessages('groups', groupId);
-
-    setupTypingIndicator('groups', groupId);
-  }
-
-  // Open DM chat
-  function openDmChat(dmId, dmData) {
-    if (messagesUnsub) messagesUnsub();
-    selectedDM = { id: dmId, ...dmData };
-    selectedGroup = null;
-    const otherEmails = dmData.participants.filter(e => e !== currentUser.email);
-    const displayName = otherEmails.map(email => usersCache[email] || email).join(', ');
-    chatTitleEl.textContent = displayName || 'Unknown User';
-    btnManageMembers.classList.add('hidden');
-    btnBackToGroups.classList.remove('hidden');
-    messageInputEl.disabled = false;
-    btnSend.disabled = true;
-    messageInputEl.value = '';
-    attachedFiles = [];
-    filePreviewEl.innerHTML = '';
-    loadMessages('dms', dmId);
-
-    setupTypingIndicator('dms', dmId);
-  }
-
-  // Load messages for a chat (groups or dms)
-  function loadMessages(type, chatId) {
-    chatMessagesEl.innerHTML = '';
-    messagesUnsub = db.collection(type).doc(chatId).collection('messages')
-      .orderBy('createdAt')
-      .onSnapshot(snapshot => {
-        chatMessagesEl.innerHTML = '';
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          chatMessagesEl.appendChild(createMessageElement(doc.id, data, type, chatId));
-        });
-        scrollChatToBottom();
-      });
-  }
-
-  // Create a message DOM element with edit/delete and read receipts
-  function createMessageElement(msgId, msgData, chatType, chatId) {
-    const msgEl = document.createElement('div');
-    msgEl.className = 'flex flex-col space-y-1 max-w-xl';
-
-    const isOwn = msgData.sender === currentUser.email;
-
-    const container = document.createElement('div');
-    container.className = `flex ${isOwn ? 'justify-end' : 'justify-start'}`;
-
-    const bubble = document.createElement('div');
-    bubble.className = `relative rounded px-3 py-2 ${
-      isOwn ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'
-    } max-w-[70%]`;
-
-    // Message text or image or file
-    if (msgData.type === 'text') {
-      bubble.innerHTML = escapeHtml(msgData.text);
-    } else if (msgData.type === 'image') {
-      const img = document.createElement('img');
-      img.src = msgData.url;
-      img.alt = 'Image';
-      img.className = 'rounded max-w-full max-h-48 cursor-pointer';
-      img.onclick = () => window.open(msgData.url, '_blank');
-      bubble.appendChild(img);
-      if (msgData.text) {
-        const caption = document.createElement('div');
-        caption.className = 'mt-1 text-sm';
-        caption.textContent = msgData.text;
-        bubble.appendChild(caption);
-      }
-    } else if (msgData.type === 'file') {
-      const a = document.createElement('a');
-      a.href = msgData.url;
-      a.download = msgData.filename || 'file';
-      a.textContent = msgData.filename || 'Download file';
-      a.className = 'underline text-blue-300';
-      bubble.appendChild(a);
-      if (msgData.text) {
-        const caption = document.createElement('div');
-        caption.className = 'mt-1 text-sm';
-        caption.textContent = msgData.text;
-        bubble.appendChild(caption);
-      }
-    }
-
-    // Timestamp
-    const ts = document.createElement('div');
-    ts.className = 'text-xs text-gray-400 mt-0.5 text-right';
-    ts.textContent = formatTimestamp(msgData.createdAt);
-    bubble.appendChild(ts);
-
-    // Read receipt: check if all members have read
-    const receipt = document.createElement('div');
-    receipt.className = 'absolute bottom-1 right-1 text-xs text-green-400';
-    if (msgData.readBy && msgData.readBy.includes(currentUser.email)) {
-      // Show double check mark for read by self
-      receipt.textContent = '✓✓';
-    } else if (msgData.readBy && msgData.readBy.length > 0) {
-      // Show single check mark for delivered to some
-      receipt.textContent = '✓';
-    }
-    bubble.appendChild(receipt);
-
-    // Edit/Delete buttons for own messages on hover
-    if (isOwn) {
-      const actions = document.createElement('div');
-      actions.className =
-        'absolute top-1 right-1 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity';
-
-      // Edit button
-      const btnEdit = document.createElement('button');
-      btnEdit.className = 'text-xs text-yellow-300 hover:text-yellow-500';
-      btnEdit.title = 'Edit message';
-      btnEdit.textContent = '✎';
-      btnEdit.onclick = e => {
-        e.stopPropagation();
-        startEditingMessage(msgId, msgData, chatType, chatId);
-      };
-
-      // Delete button
-      const btnDelete = document.createElement('button');
-      btnDelete.className = 'text-xs text-red-400 hover:text-red-600';
-      btnDelete.title = 'Delete message';
-      btnDelete.textContent = '🗑';
-      btnDelete.onclick = e => {
-        e.stopPropagation();
-        deleteMessage(msgId, chatType, chatId);
-      };
-
-      actions.appendChild(btnEdit);
-      actions.appendChild(btnDelete);
-      bubble.classList.add('group', 'relative');
-      bubble.appendChild(actions);
-    }
-
-    container.appendChild(bubble);
-    msgEl.appendChild(container);
-
-    return msgEl;
-  }
-
-  // Scroll chat to bottom
-  function scrollChatToBottom() {
-    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-  }
-
-  // Send message handler
-  async function sendMessage() {
-    const text = messageInputEl.value.trim();
-    if (!text && attachedFiles.length === 0) return;
-
-    btnSend.disabled = true;
-
-    let type = 'text';
-    let messagePayload = {
-      sender: currentUser.email,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      readBy: [currentUser.email], // Mark read by sender
-    };
-
-    if (attachedFiles.length > 0) {
-      // Upload files and send as separate messages
-      for (const fileObj of attachedFiles) {
-        const storageRef = firebase.storage().ref();
-        const fileRef = storageRef.child(
-          `chat_files/${Date.now()}_${fileObj.file.name}`
-        );
-        await fileRef.put(fileObj.file);
-        const url = await fileRef.getDownloadURL();
-
-        let msgType = 'file';
-        if (fileObj.file.type.startsWith('image/')) {
-          msgType = 'image';
-        }
-
-        const msg = {
-          ...messagePayload,
-          type: msgType,
-          url,
-          filename: fileObj.file.name,
-          text: fileObj.caption || '',
-        };
-
-        await sendToFirestore(msg);
-      }
-      attachedFiles = [];
-      filePreviewEl.innerHTML = '';
-      messageInputEl.value = '';
-      btnSend.disabled = false;
-      return;
-    }
-
-    // Only text message
-    messagePayload.type = 'text';
-    messagePayload.text = text;
-
-    await sendToFirestore(messagePayload);
-    messageInputEl.value = '';
-    btnSend.disabled = false;
-  }
-
-  // Helper to send message object to firestore
-  async function sendToFirestore(msg) {
-    if (selectedGroup) {
-      await db.collection('groups')
-        .doc(selectedGroup.id)
-        .collection('messages')
-        .add(msg);
-      // Update group's last message time (optional)
-      await db.collection('groups').doc(selectedGroup.id).update({
-        lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
-      });
-    } else if (selectedDM) {
-      await db.collection('dms')
-        .doc(selectedDM.id)
-        .collection('messages')
-        .add(msg);
-      await db.collection('dms').doc(selectedDM.id).update({
-        lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
-      });
-    }
-  }
-
-  // Start editing a message
-  function startEditingMessage(msgId, msgData, chatType, chatId) {
-    isEditing = true;
-    editingMessageId = msgId;
-    messageInputEl.value = msgData.text || '';
-    btnSend.textContent = 'Save';
-    messageInputEl.focus();
-  }
-
-  // Save edited message
-  async function saveEditedMessage() {
-    const newText = messageInputEl.value.trim();
-    if (!newText) return;
-
-    if (!editingMessageId) return;
-
-    let msgRef;
-    if (selectedGroup) {
-      msgRef = db.collection('groups')
-        .doc(selectedGroup.id)
-        .collection('messages')
-        .doc(editingMessageId);
-    } else if (selectedDM) {
-      msgRef = db.collection('dms')
-        .doc(selectedDM.id)
-        .collection('messages')
-        .doc(editingMessageId);
-    }
-
-    await msgRef.update({
-      text: newText,
-      edited: true,
-      editedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
-
-    isEditing = false;
-    editingMessageId = null;
-    btnSend.textContent = 'Send';
-    messageInputEl.value = '';
-  }
-
-  // Delete message
-  async function deleteMessage(msgId, chatType, chatId) {
-    if (!confirm('Are you sure you want to delete this message?')) return;
-
-    let msgRef;
-    if (chatType === 'groups') {
-      msgRef = db.collection('groups').doc(chatId).collection('messages').doc(msgId);
-    } else if (chatType === 'dms') {
-      msgRef = db.collection('dms').doc(chatId).collection('messages').doc(msgId);
-    }
-    await msgRef.delete();
-  }
-
-  // Escape HTML for safe text
+  // Utility: Escape HTML to prevent XSS
   function escapeHtml(text) {
     const div = document.createElement('div');
     div.appendChild(document.createTextNode(text));
     return div.innerHTML;
   }
 
-  // Format timestamp
+  // Format timestamp for messages
   function formatTimestamp(ts) {
     if (!ts) return '';
     if (ts.toDate) ts = ts.toDate();
@@ -846,311 +215,1154 @@ const firebaseConfig = {
     return ts.toLocaleDateString();
   }
 
-  // Setup typing indicator listener
-  function setupTypingIndicator(chatType, chatId) {
-    if (typingUnsub) typingUnsub();
-
-    typingIndicatorEl.textContent = '';
-
-    const typingRef = db.collection(chatType).doc(chatId).collection('typing');
-
-    // Listen to typing status of other users
-    typingUnsub = typingRef.onSnapshot(snapshot => {
-      let typingUsers = [];
-      snapshot.forEach(doc => {
-        if (doc.id !== currentUser.email && doc.data().typing) {
-          typingUsers.push(usersCache[doc.id] || doc.id);
-        }
-      });
-      typingIndicatorEl.textContent = typingUsers.length > 0
-        ? `${typingUsers.join(', ')} is typing...`
-        : '';
-    });
-  }
-
-  // Update typing status in firestore
-  function updateTypingStatus(typing) {
-    if (!selectedGroup && !selectedDM) return;
-
-    const chatType = selectedGroup ? 'groups' : 'dms';
-    const chatId = selectedGroup ? selectedGroup.id : selectedDM.id;
-
-    const typingRef = db.collection(chatType).doc(chatId).collection('typing').doc(currentUser.email);
-
-    typingRef.set({ typing }, { merge: true });
-  }
-
-  // Event listeners
-  messageInputEl.addEventListener('input', e => {
-    btnSend.disabled = !e.target.value.trim() && attachedFiles.length === 0;
-    updateTypingStatus(e.target.value.trim().length > 0);
-  });
-
-  btnSend.addEventListener('click', async () => {
-    if (isEditing) {
-      await saveEditedMessage();
-    } else {
-      await sendMessage();
-    }
-    updateTypingStatus(false);
-  });
-
-  btnAttach.addEventListener('click', () => {
-    fileInputEl.click();
-  });
-
-  fileInputEl.addEventListener('change', e => {
-    const files = Array.from(e.target.files);
-    for (const file of files) {
-      attachedFiles.push({ file, caption: '' });
-    }
-    renderFilePreviews();
-    btnSend.disabled = false;
-    e.target.value = '';
-  });
-
-  // Render file previews
-  function renderFilePreviews() {
-    filePreviewEl.innerHTML = '';
-    attachedFiles.forEach((fileObj, idx) => {
-      const div = document.createElement('div');
-      div.className = 'mb-2 border border-gray-600 rounded p-1 flex items-center space-x-2';
-
-      if (fileObj.file.type.startsWith('image/')) {
-        const img = document.createElement('img');
-        img.src = URL.createObjectURL(fileObj.file);
-        img.className = 'w-12 h-12 object-cover rounded';
-        div.appendChild(img);
-      } else {
-        const icon = document.createElement('div');
-        icon.className = 'w-12 h-12 flex items-center justify-center bg-gray-700 rounded text-gray-400';
-        icon.textContent = '📄';
-        div.appendChild(icon);
-      }
-
-      const name = document.createElement('div');
-      name.className = 'flex-grow text-sm';
-      name.textContent = fileObj.file.name;
-      div.appendChild(name);
-
-      // Caption input
-      const captionInput = document.createElement('input');
-      captionInput.type = 'text';
-      captionInput.placeholder = 'Add caption...';
-      captionInput.className = 'bg-gray-800 rounded p-1 text-xs flex-grow';
-      captionInput.value = fileObj.caption || '';
-      captionInput.oninput = e => {
-        attachedFiles[idx].caption = e.target.value;
-      };
-      div.appendChild(captionInput);
-
-      // Remove button
-      const btnRemove = document.createElement('button');
-      btnRemove.className = 'text-red-400 hover:text-red-600 ml-2';
-      btnRemove.textContent = '✖';
-      btnRemove.onclick = () => {
-        attachedFiles.splice(idx, 1);
-        renderFilePreviews();
-        btnSend.disabled = !messageInputEl.value.trim() && attachedFiles.length === 0;
-      };
-      div.appendChild(btnRemove);
-
-      filePreviewEl.appendChild(div);
-    });
-  }
-
-  // Manage Members button click
-  btnManageMembers.addEventListener('click', () => {
-    if (!selectedGroup) return;
-    openManageMembersModal();
-  });
-
-  // Back to groups button click (closes chat)
-  btnBackToGroups.addEventListener('click', () => {
-    resetSelection();
-  });
-
-  // Open manage members modal
-  async function openManageMembersModal() {
-    // Show modal and load members
-    membersListEl.innerHTML = 'Loading...';
-    membersModal.classList.remove('hidden');
-    const groupRef = db.collection('groups').doc(selectedGroup.id);
-    const groupDoc = await groupRef.get();
-    const groupData = groupDoc.data();
-
-    const members = groupData.members || [];
-    membersListEl.innerHTML = '';
-    members.forEach(email => {
-      const div = document.createElement('div');
-      div.className = 'flex justify-between items-center border-b border-gray-700 py-1';
-
-      const name = usersCache[email] || email;
-      const span = document.createElement('span');
-      span.textContent = name;
-
-      const btnRemove = document.createElement('button');
-      btnRemove.textContent = 'Remove';
-      btnRemove.className = 'text-red-400 hover:text-red-600 text-sm';
-      btnRemove.onclick = async () => {
-        if (email === currentUser.email) {
-          alert('You cannot remove yourself.');
-          return;
-        }
-        if (!confirm(`Remove ${name} from the group?`)) return;
-        const newMembers = members.filter(m => m !== email);
-        await groupRef.update({ members: newMembers });
-        openManageMembersModal();
-      };
-
-      div.appendChild(span);
-      div.appendChild(btnRemove);
-      membersListEl.appendChild(div);
-    });
-  }
-
-  // Close modal button
-  closeModalBtn.addEventListener('click', () => {
-    membersModal.classList.add('hidden');
-  });
-
-  // Add member input + button
-  addMemberBtn.addEventListener('click', async () => {
-    const email = addMemberInput.value.trim().toLowerCase();
-    if (!email) return alert('Enter a valid email');
-    if (!validateEmail(email)) return alert('Enter a valid email address');
-    if (selectedGroup.members && selectedGroup.members.includes(email)) {
-      alert('User already a member');
-      return;
-    }
-
-    // Check if user exists
-    if (!(email in usersCache)) {
-      alert('User does not exist');
-      return;
-    }
-
-    const groupRef = db.collection('groups').doc(selectedGroup.id);
-    const groupDoc = await groupRef.get();
-    const groupData = groupDoc.data();
-    const newMembers = [...(groupData.members || []), email];
-
-    await groupRef.update({ members: newMembers });
-    addMemberInput.value = '';
-    openManageMembersModal();
-  });
-
-  // Email validation regex
-  function validateEmail(email) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  }
-
-  // User sign out
-  signOutBtn.addEventListener('click', () => {
-    auth.signOut();
-  });
-
-  // Create new group button
-  createGroupBtn.addEventListener('click', () => {
-    const groupName = prompt('Enter group name:');
-    if (!groupName) return;
-    db.collection('groups').add({
-      name: groupName,
-      members: [currentUser.email],
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
-  });
-
-  // Create new DM button
-  createDmBtn.addEventListener('click', async () => {
-    const email = prompt('Enter email of the user to DM:');
-    if (!email || !validateEmail(email)) return alert('Invalid email');
-    if (email === currentUser.email) return alert('Cannot DM yourself');
-
-    // Check if user exists
-    if (!(email in usersCache)) return alert('User does not exist');
-
-    // Check if DM already exists
-    const existingDm = await db.collection('dms')
-      .where('participants', 'array-contains', currentUser.email)
-      .get();
-
-    let foundDm = null;
-    existingDm.forEach(doc => {
-      const data = doc.data();
-      if (data.participants.includes(email) && data.participants.length === 2) {
-        foundDm = { id: doc.id, ...data };
-      }
-    });
-
-    if (foundDm) {
-      openDmChat(foundDm.id, foundDm);
-    } else {
-      // Create new DM
-      const dmRef = await db.collection('dms').add({
-        participants: [currentUser.email, email],
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      });
-      openDmChat(dmRef.id, { participants: [currentUser.email, email] });
-    }
-  });
-
-  // Load user profiles for cache
+  // Load users for cache
   async function loadUsersCache() {
     const usersSnapshot = await db.collection('users').get();
     usersSnapshot.forEach(doc => {
       const data = doc.data();
-      if (data.email && data.displayName) {
-        usersCache[data.email] = data.displayName;
-      }
+      usersCache[data.email] = data.displayName || data.email;
     });
   }
 
-  // Initialize app on auth state change
+  // Authentication state changed
   auth.onAuthStateChanged(async user => {
     if (user) {
       currentUser = user;
-      displayNameEl.textContent = user.displayName || user.email;
-      chatContainer.classList.remove('hidden');
       loginContainer.classList.add('hidden');
+      chatContainer.classList.remove('hidden');
+      displayNameEl.textContent = user.displayName || user.email;
 
-      // Load users cache
+      // Save user info in 'users' collection if not exist
+      const userDoc = await db.collection('users').doc(user.uid).get();
+      if (!userDoc.exists) {
+        await db.collection('users').doc(user.uid).set({
+          email: user.email,
+          displayName: user.displayName || user.email
+        });
+      }
+
       await loadUsersCache();
-
-      setupGroupListeners();
-      setupDmListeners();
+      startListeningGroups();
+      startListeningDMs();
+      resetChatView();
     } else {
       currentUser = null;
-      chatContainer.classList.add('hidden');
       loginContainer.classList.remove('hidden');
+      chatContainer.classList.add('hidden');
+      clearListeners();
     }
   });
 
   // Login form submit
   loginForm.addEventListener('submit', async e => {
     e.preventDefault();
-    const email = loginEmail.value.trim();
-    const password = loginPassword.value;
+    loginError.textContent = '';
     try {
-      await auth.signInWithEmailAndPassword(email, password);
-      loginError.textContent = '';
-      loginForm.reset();
-    } catch (error) {
-      loginError.textContent = error.message;
+      await auth.signInWithEmailAndPassword(loginEmail.value.trim(), loginPassword.value);
+    } catch (err) {
+      loginError.textContent = err.message;
     }
   });
 
-  // Escape HTML utility for safety
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.appendChild(document.createTextNode(text));
-    return div.innerHTML;
+  // Sign out
+  signOutBtn.addEventListener('click', () => {
+    auth.signOut();
+  });
+
+  // Clear listeners
+  function clearListeners() {
+    if (groupsUnsub) groupsUnsub();
+    if (dmsUnsub) dmsUnsub();
+    if (messagesUnsub) messagesUnsub();
+    if (typingUnsub) typingUnsub();
+    groupsListEl.innerHTML = '';
+    dmsListEl.innerHTML = '';
+    messagesContainer.innerHTML = '';
+    typingIndicatorEl.textContent = '';
+    chatTitle.textContent = '';
+    selectedGroup = null;
+    selectedDM = null;
   }
 
-  // Initialize
-  // (No explicit call needed, as auth state change listener triggers all)
+  // Start listening to groups where current user is member
+  function startListeningGroups() {
+    if (!currentUser) return;
+    groupsUnsub = db.collection('groups')
+      .where('members', 'array-contains', currentUser.email)
+      .orderBy('createdAt', 'desc')
+      .onSnapshot(snapshot => {
+        groupsListEl.innerHTML = '';
+        snapshot.forEach(doc => {
+          const group = { id: doc.id, ...doc.data() };
+          const el = document.createElement('button');
+          el.textContent = group.name;
+          el.className = `text-left p-2 rounded hover:bg-gray-700 truncate ${selectedGroup?.id === group.id ? 'bg-blue-700' : ''}`;
+          el.onclick = () => selectGroup(group);
+          groupsListEl.appendChild(el);
+        });
+      });
+  }
 
+  // Start listening to DMs involving current user
+  function startListeningDMs() {
+    if (!currentUser) return;
+    dmsUnsub = db.collection('dms')
+      .where('participants', 'array-contains', currentUser.email)
+      .orderBy('createdAt', 'desc')
+      .onSnapshot(snapshot => {
+        dmsListEl.innerHTML = '';
+        snapshot.forEach(doc => {
+          const dm = { id: doc.id, ...doc.data() };
+          // Show the other participant email or displayName
+          const otherEmail = dm.participants.find(e => e !== currentUser.email);
+          const otherName = usersCache[otherEmail] || otherEmail;
+
+          const el = document.createElement('button');
+          el.textContent = otherName;
+          el.className = `text-left p-2 rounded hover:bg-gray-700 truncate ${selectedDM?.id === dm.id ? 'bg-blue-700' : ''}`;
+          el.onclick = () => selectDM(dm);
+          dmsListEl.appendChild(el);
+        });
+      });
+  }
+
+  // Select a group to chat
+  function selectGroup(group) {
+    selectedGroup = group;
+    selectedDM = null;
+    chatTitle.textContent = group.name;
+    btnManageMembers.style.display = 'inline-block';
+    btnBackToGroups.style.display = 'none';
+    chatDetailsPanel.classList.remove('hidden');
+
+    loadChatMessages('groups', group.id);
+    loadChatDetails('groups', group.id, group);
+  }
+
+  // Select a DM to chat
+  function selectDM(dm) {
+    selectedDM = dm;
+    selectedGroup = null;
+    const otherEmail = dm.participants.find(e => e !== currentUser.email);
+    chatTitle.textContent = usersCache[otherEmail] || otherEmail;
+    btnManageMembers.style.display = 'none';
+    btnBackToGroups.style.display = 'inline-block';
+    chatDetailsPanel.classList.remove('hidden');
+
+    loadChatMessages('dms', dm.id);
+    loadChatDetails('dms', dm.id, dm);
+  }
+
+  // Reset chat view when user logs in or switches
+  function resetChatView() {
+    selectedGroup = null;
+    selectedDM = null;
+    messagesContainer.innerHTML = '';
+    chatTitle.textContent = '';
+    btnManageMembers.style.display = 'none';
+    btnBackToGroups.style.display = 'none';
+    chatDetailsPanel.classList.add('hidden');
+  }
+
+  // Back button for DMs to go back to groups list view
+  btnBackToGroups.addEventListener('click', () => {
+    resetChatView();
+  });
+
+  // Manage members button opens modal
+  btnManageMembers.addEventListener('click', () => {
+    if (!selectedGroup) return;
+    openMembersModal(selectedGroup);
+  });
+
+  // Load chat messages
+  function loadChatMessages(type, chatId) {
+    if (messagesUnsub) messagesUnsub();
+    messagesContainer.innerHTML = '';
+    typingIndicatorEl.textContent = '';
+
+    const messagesRef = db.collection(type).doc(chatId).collection('messages').orderBy('createdAt');
+
+    messagesUnsub = messagesRef.onSnapshot(snapshot => {
+      messagesContainer.innerHTML = '';
+      snapshot.forEach(doc => {
+        const msg = doc.data();
+        renderMessage(doc.id, msg);
+      });
+      scrollMessagesToBottom();
+    });
+  }
+
+  // Render a message item
+  function renderMessage(id, msg) {
+    const div = document.createElement('div');
+    div.className = 'p-2 rounded max-w-xs break-words';
+    const isCurrentUser = msg.sender === currentUser.email;
+    div.classList.add(isCurrentUser ? 'bg-blue-600 ml-auto' : 'bg-gray-700 mr-auto');
+    div.style.whiteSpace = 'pre-wrap';
+
+    let contentHtml = `<div class="text-xs text-gray-300">${escapeHtml(usersCache[msg.sender] || msg.sender)}</div>`;
+
+    if (msg.text) {
+      contentHtml += `<div class="mt-1">${escapeHtml(msg.text)}</div>`;
+    }
+
+    if (msg.imageUrls && msg.imageUrls.length > 0) {
+      msg.imageUrls.forEach(url => {
+        contentHtml += `<img src="${url}" alt="image" class="mt-2 rounded max-w-full cursor-pointer" onclick="window.open('${url}', '_blank')" />`;
+      });
+    }
+
+    if (msg.edited) {
+      contentHtml += `<div class="text-xs text-gray-400 italic">(edited)</div>`;
+    }
+
+    // Actions: edit & delete for current user
+    if (isCurrentUser) {
+      contentHtml += `
+        <div class="flex space-x-2 mt-1 text-sm text-gray-300">
+          <button onclick="startEditMessage('${id}', '${msg.text ? escapeHtml(msg.text) : ''}')" class="hover:text-yellow-300">✏️</button>
+          <button onclick="deleteMessage('${id}')" class="hover:text-red-500">🗑️</button>
+        </div>`;
+    }
+
+    div.innerHTML = contentHtml;
+    messagesContainer.appendChild(div);
+  }
+
+  // Scroll messages container to bottom
+  function scrollMessagesToBottom() {
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+  // Start editing a message
+  window.startEditMessage = function(messageId, text) {
+    isEditing = true;
+    editingMessageId = messageId;
+    messageInputEl.value = text;
+    btnSend.textContent = 'Update';
+    messageInputEl.focus();
+  };
+
+  // Delete a message
+  window.deleteMessage = async function(messageId) {
+    if (!selectedGroup && !selectedDM) return;
+    if (!confirm('Delete this message?')) return;
+
+    const type = selectedGroup ? 'groups' : 'dms';
+    const chatId = selectedGroup ? selectedGroup.id : selectedDM.id;
+
+    try {
+      await db.collection(type).doc(chatId).collection('messages').doc(messageId).delete();
+    } catch (err) {
+      alert('Error deleting message: ' + err.message);
+    }
+  };
+
+  // Send or update message
+  btnSend.addEventListener('click', async () => {
+    if (!messageInputEl.value.trim() && filePreviewEl.children.length === 0) return;
+
+    const text = messageInputEl.value.trim();
+    const type = selectedGroup ? 'groups' : 'dms';
+    const chatId = selectedGroup ? selectedGroup.id : selectedDM.id;
+
+    if (!chatId) {
+      alert('Please select a chat first.');
+      return;
+    }
+
+    btnSend.disabled = true;
+
+    try {
+      let imageUrls = [];
+      if (filePreviewEl.children.length > 0) {
+        // For simplicity, file upload is skipped here - implement if you want.
+        // You can upload files to Firebase Storage and get URLs here.
+        alert('File upload not implemented in this demo.');
+        btnSend.disabled = false;
+        return;
+      }
+
+      if (isEditing) {
+        // Update message
+        await db.collection(type).doc(chatId).collection('messages').doc(editingMessageId).update({
+          text,
+          edited: true,
+          editedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+        isEditing = false;
+        editingMessageId = null;
+        btnSend.textContent = 'Send';
+      } else {
+        // New message
+        await db.collection(type).doc(chatId).collection('messages').add({
+          text,
+          sender: currentUser.email,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          imageUrls,
+        });
+      }
+
+      messageInputEl.value = '';
+      filePreviewEl.innerHTML = '';
+      btnSend.disabled = false;
+      scrollMessagesToBottom();
+    } catch (err) {
+      alert('Error sending message: ' + err.message);
+      btnSend.disabled = false;
+    }
+  });
+
+  // Enable send button only if message input has content
+  messageInputEl.addEventListener('input', () => {
+    btnSend.disabled = messageInputEl.value.trim() === '' && filePreviewEl.children.length === 0;
+  });
+
+  // Attach button opens file input
+  btnAttach.addEventListener('click', () => {
+    fileInputEl.click();
+  });
+
+  // File input change handler (preview only, no upload)
+  fileInputEl.addEventListener('change', () => {
+    filePreviewEl.innerHTML = '';
+    const files = Array.from(fileInputEl.files);
+    files.forEach(file => {
+      const url = URL.createObjectURL(file);
+      const img = document.createElement('img');
+      img.src = url;
+      img.className = 'h-16 rounded cursor-pointer';
+      img.title = file.name;
+      img.onclick = () => window.open(url, '_blank');
+      filePreviewEl.appendChild(img);
+    });
+    btnSend.disabled = false;
+  });
+
+  // Create new group
+  createGroupBtn.addEventListener('click', async () => {
+    const groupName = prompt('Enter new group name');
+    if (!groupName) return;
+
+    try {
+      await db.collection('groups').add({
+        name: groupName,
+        members: [currentUser.email],
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (err) {
+      alert('Error creating group: ' + err.message);
+    }
+  });
+
+  // Create new DM (direct message)
+  createDmBtn.addEventListener('click', async () => {
+    const email = prompt('Enter email of user to DM');
+    if (!email || email === currentUser.email) return alert("Invalid email.");
+
+    try {
+      // Check if DM already exists
+      const dmsSnapshot = await db.collection('dms')
+        .where('participants', 'in', [[currentUser.email, email], [email, currentUser.email]])
+        .get();
+
+      if (!dmsSnapshot.empty) {
+        alert('DM already exists. Select it from the list.');
+        return;
+      }
+
+      await db.collection('dms').add({
+        participants: [currentUser.email, email],
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (err) {
+      alert('Error creating DM: ' + err.message);
+    }
+  });
+
+  // Manage Members Modal
+  function openMembersModal(group) {
+    membersListEl.innerHTML = '';
+    addMemberInput.value = '';
+
+    group.members.forEach(memberEmail => {
+      const div = document.createElement('div');
+      div.className = 'flex justify-between items-center p-2 border-b border-gray-700';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = usersCache[memberEmail] || memberEmail;
+      div.appendChild(nameSpan);
+
+      if (memberEmail !== currentUser.email) {
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = 'Remove';
+        removeBtn.className = 'text-red-500 hover:text-red-700 font-semibold';
+        removeBtn.onclick = () => removeMember(group.id, memberEmail);
+        div.appendChild(removeBtn);
+      }
+
+      membersListEl.appendChild(div);
+    });
+
+    membersModal.classList.remove('hidden');
+  }
+
+  closeModalBtn.addEventListener('click', () => {
+    membersModal.classList.add('hidden');
+  });
+
+  addMemberBtn.addEventListener('click', async () => {
+    const emailToAdd = addMemberInput.value.trim();
+    if (!emailToAdd) return;
+    if (selectedGroup.members.includes(emailToAdd)) {
+      alert('User already a member.');
+      return;
+    }
+
+    // You can validate if user exists here, or just add.
+    try {
+      const groupRef = db.collection('groups').doc(selectedGroup.id);
+      await groupRef.update({
+        members: firebase.firestore.FieldValue.arrayUnion(emailToAdd)
+      });
+      selectedGroup.members.push(emailToAdd);
+      openMembersModal(selectedGroup);
+      addMemberInput.value = '';
+    } catch (err) {
+      alert('Error adding member: ' + err.message);
+    }
+  });
+
+  async function removeMember(groupId, email) {
+    if (!confirm(`Remove ${email} from group?`)) return;
+
+    try {
+      const groupRef = db.collection('groups').doc(groupId);
+      await groupRef.update({
+        members: firebase.firestore.FieldValue.arrayRemove(email)
+      });
+      selectedGroup.members = selectedGroup.members.filter(e => e !== email);
+      openMembersModal(selectedGroup);
+    } catch (err) {
+      alert('Error removing member: ' + err.message);
+    }
+  }
+
+  // Load chat details (files, links, participants)
+  function loadChatDetails(type, chatId, chatData) {
+    // Implementation of details panel as needed.
+    // For demo, just show participants or members.
+    chatDetailsPanel.innerHTML = '';
+    const title = document.createElement('h3');
+    title.textContent = 'Chat Details';
+    title.className = 'text-lg font-bold mb-2';
+    chatDetailsPanel.appendChild(title);
+
+    const participantsTitle = document.createElement('h4');
+    participantsTitle.textContent = 'Participants:';
+    participantsTitle.className = 'font-semibold mb-1';
+    chatDetailsPanel.appendChild(participantsTitle);
+
+    const ul = document.createElement('ul');
+    const participants = type === 'groups' ? chatData.members : chatData.participants;
+    participants.forEach(email => {
+      const li = document.createElement('li');
+      li.textContent = usersCache[email] || email;
+      ul.appendChild(li);
+    });
+    chatDetailsPanel.appendChild(ul);
+  }
+
+  // Escape HTML to prevent XSS
+  function escapeHtml(text) {
+    if (!text) return '';
+    return text.replace(/[&<>"']/g, function(m) {
+      return {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[m];
+    });
+  }
 })();
 </script>
+</body>
+</html>Here is a cleaned-up and full single HTML file for a chat website with UI matching your uploaded design, using Firebase for backend (authentication, Firestore for messages, storage for images), supporting:
+
+- User sign up/sign in
+- Sidebar with private and group chats
+- Center chat area with messages (text, images, emojis)
+- Right panel for chat details (participants, files, links)
+- Dark mode toggle synced with system preference
+- Group chat creation, adding/removing members
+- Typing indicators
+- Message sending with image upload
+- Emoji picker (basic)
+- Tailwind CSS for styling
+
+**You only need to replace** the Firebase config with your own project’s config (API keys etc.).
+
+```html
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth" >
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chat Website - Dark Themed iMessage UI</title>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-storage-compat.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body,html,#app {
+    height: 100%;
+  }
+  /* Custom scrollbar for sidebar and chat list */
+  #sidebar::-webkit-scrollbar,
+  #chatList::-webkit-scrollbar {
+    width: 6px;
+  }
+  #sidebar::-webkit-scrollbar-thumb,
+  #chatList::-webkit-scrollbar-thumb {
+    background-color: #555;
+    border-radius: 3px;
+  }
+  /* Scrollbar for messages */
+  #messages::-webkit-scrollbar {
+    width: 6px;
+  }
+  #messages::-webkit-scrollbar-thumb {
+    background-color: #666;
+    border-radius: 3px;
+  }
+  /* Simple fade for images on hover */
+  .message-image:hover {
+    opacity: 0.9;
+  }
+  /* Emoji picker dropdown */
+  .emoji-picker {
+    position: absolute;
+    bottom: 3rem;
+    right: 2.5rem;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 0.375rem;
+    max-width: 200px;
+    max-height: 120px;
+    overflow-y: auto;
+    padding: 0.5rem;
+    z-index: 50;
+  }
+  .emoji-picker button {
+    font-size: 1.4rem;
+    padding: 0.15rem 0.4rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .emoji-picker button:hover {
+    background-color: #444;
+    border-radius: 0.25rem;
+  }
+</style>
+</head>
+<body class="bg-gray-900 text-gray-100 selection:bg-indigo-600 selection:text-white transition-colors duration-300">
+
+<div id="app" class="flex h-full w-full">
+
+  <!-- Sidebar -->
+  <aside id="sidebar" class="flex flex-col w-72 bg-gray-800 border-r border-gray-700 overflow-y-auto">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-700">
+      <h1 class="text-xl font-bold">Chats</h1>
+      <button id="btnNewGroup" title="New Group" class="text-indigo-400 hover:text-indigo-600 transition rounded p-1">
+        <!-- group icon -->
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20h5v-2a3 3 0 0 0-3-3h-2"></path><circle cx="9" cy="7" r="4"></circle><path d="M9 11v7"></path><path d="M1 20h4"></path></svg>
+      </button>
+    </div>
+    <div class="flex-1" id="chatList" tabindex="0" aria-label="Chat List" role="list" ></div>
+    <div class="px-4 py-3 border-t border-gray-700 flex items-center space-x-3">
+      <div id="userEmail" class="flex-1 truncate text-sm"></div>
+      <button id="btnSignOut" title="Sign Out" class="text-red-500 hover:text-red-600 transition rounded p-1">
+        <!-- logout icon -->
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main Chat Area -->
+  <main class="flex flex-col flex-grow relative bg-gray-900">
+    <!-- Chat Header -->
+    <header id="chatHeader" class="flex items-center justify-between px-6 py-4 border-b border-gray-700 bg-gray-800">
+      <div>
+        <h2 id="chatTitle" class="text-xl font-semibold truncate max-w-xs"></h2>
+        <div id="chatSubtitle" class="text-sm text-gray-400 truncate max-w-xs"></div>
+      </div>
+      <button id="btnShowDetails" title="Chat Details" class="text-indigo-400 hover:text-indigo-600 transition rounded p-1">
+        <!-- info icon -->
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+      </button>
+    </header>
+
+    <!-- Messages Container -->
+    <section id="messages" class="flex-1 px-6 py-4 overflow-y-auto space-y-3 scroll-smooth bg-gray-900"></section>
+
+    <!-- Typing Indicator -->
+    <div id="typingIndicator" class="px-6 pb-1 text-sm text-gray-400 h-5"></div>
+
+    <!-- Message Input Area -->
+    <form id="messageForm" class="flex items-center px-6 py-3 border-t border-gray-700 bg-gray-800">
+      <button id="btnEmojiToggle" type="button" title="Toggle Emoji Picker" class="mr-2 text-indigo-400 hover:text-indigo-600 transition rounded p-1">
+        😀
+      </button>
+      <input id="messageInput" type="text" autocomplete="off" placeholder="Type a message" required
+        class="flex-grow bg-gray-700 rounded-full px-4 py-2 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-600" />
+      <label for="imageUpload" class="ml-3 cursor-pointer text-indigo-400 hover:text-indigo-600" title="Attach Image">
+        <!-- paperclip icon -->
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 inline-block" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05a5 5 0 0 0-7.07 0L5.6 19.83a3.75 3.75 0 0 0 5.3 5.3l7.67-7.67a1.5 1.5 0 0 0 0-2.12L14 9"></path></svg>
+      </label>
+      <input id="imageUpload" type="file" accept="image/*" class="hidden" />
+      <button type="submit" class="ml-3 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-full transition">Send</button>
+    </form>
+
+    <!-- Emoji Picker -->
+    <div id="emojiPicker" class="emoji-picker hidden" aria-label="Emoji Picker"></div>
+  </main>
+
+  <!-- Right Panel: Chat Details -->
+  <aside id="chatDetailsPanel" class="w-80 bg-gray-800 border-l border-gray-700 p-4 overflow-y-auto hidden">
+    <h3 class="text-lg font-bold mb-4">Chat Details</h3>
+    <div id="chatDetailsContent" class="space-y-4"></div>
+  </aside>
+
+</div>
+
+<!-- Modals -->
+<!-- New Group Modal -->
+<div id="modalNewGroup" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="modalNewGroupTitle">
+  <div class="bg-gray-800 rounded-lg w-96 p-6 space-y-4 relative">
+    <h2 id="modalNewGroupTitle" class="text-xl font-semibold">Create New Group</h2>
+    <form id="formNewGroup" class="space-y-4">
+      <input id="newGroupName" type="text" placeholder="Group Name" required
+        class="w-full rounded px-3 py-2 bg-gray-700 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-600" />
+      <textarea id="newGroupMembers" placeholder="Members emails (comma separated)" rows="3"
+        class="w-full rounded px-3 py-2 bg-gray-700 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-600"></textarea>
+      <div class="flex justify-end space-x-3">
+        <button type="button" id="btnCancelNewGroup" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-700">Cancel</button>
+        <button type="submit" class="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white">Create</button>
+      </div>
+    </form>
+    <button id="btnCloseNewGroup" aria-label="Close modal" class="absolute top-3 right-3 text-gray-400 hover:text-gray-200">
+      &times;
+    </button>
+  </div>
+</div>
+
+<script>
+  (function(){
+    // Firebase config - REPLACE WITH YOUR OWN CONFIG
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    const storage = firebase.storage();
+
+    // Elements references
+    const userEmailEl = document.getElementById('userEmail');
+    const btnSignOut = document.getElementById('btnSignOut');
+    const chatListEl = document.getElementById('chatList');
+    const chatTitleEl = document.getElementById('chatTitle');
+    const chatSubtitleEl = document.getElementById('chatSubtitle');
+    const messagesEl = document.getElementById('messages');
+    const typingIndicatorEl = document.getElementById('typingIndicator');
+    const messageForm = document.getElementById('messageForm');
+    const messageInput = document.getElementById('messageInput');
+    const imageUpload = document.getElementById('imageUpload');
+    const emojiPicker = document.getElementById('emojiPicker');
+    const btnEmojiToggle = document.getElementById('btnEmojiToggle');
+    const btnShowDetails = document.getElementById('btnShowDetails');
+    const chatDetailsPanel = document.getElementById('chatDetailsPanel');
+    const chatDetailsContent = document.getElementById('chatDetailsContent');
+    const btnNewGroup = document.getElementById('btnNewGroup');
+    const modalNewGroup = document.getElementById('modalNewGroup');
+    const formNewGroup = document.getElementById('formNewGroup');
+    const btnCancelNewGroup = document.getElementById('btnCancelNewGroup');
+    const btnCloseNewGroup = document.getElementById('btnCloseNewGroup');
+
+    // State
+    let currentUser = null;
+    let currentChatId = null;
+    let currentChatType = null; // 'private' or 'group'
+    let chats = []; // all chats (private + groups)
+    let usersCache = {}; // email -> displayName
+    let typingTimeout = null;
+    let unsubscribeMessages = null;
+    let unsubscribeChats = null;
+    let typingRef = null;
+
+    // Helper: escape HTML to prevent XSS
+    function escapeHtml(text) {
+      if (!text) return '';
+      return text.replace(/[&<>"']/g, m => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      })[m]);
+    }
+
+    // Show login prompt (simple)
+    function showLoginPrompt() {
+      let email = prompt('Enter your email to login/sign up:');
+      if (!email) return showLoginPrompt();
+      auth.signInWithEmailAndPassword(email, 'defaultpassword').catch(() => {
+        // If no user, create one with default password
+        auth.createUserWithEmailAndPassword(email, 'defaultpassword').catch(err => {
+          alert('Auth error: ' + err.message);
+        });
+      });
+    }
+
+    // Auth state change
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        currentUser = user;
+        userEmailEl.textContent = user.email;
+        loadChats();
+      } else {
+        currentUser = null;
+        userEmailEl.textContent = '';
+        chatListEl.innerHTML = '';
+        chatTitleEl.textContent = '';
+        chatSubtitleEl.textContent = '';
+        messagesEl.innerHTML = '';
+        typingIndicatorEl.textContent = '';
+        chatDetailsPanel.classList.add('hidden');
+        showLoginPrompt();
+      }
+    });
+
+    // Sign out button
+    btnSignOut.onclick = () => {
+      auth.signOut();
+      if(unsubscribeMessages) unsubscribeMessages();
+      if(unsubscribeChats) unsubscribeChats();
+      currentChatId = null;
+      currentChatType = null;
+    };
+
+    // Load chats (private and groups)
+    function loadChats() {
+      if (unsubscribeChats) unsubscribeChats();
+
+      unsubscribeChats = db.collection('privateChats')
+        .where('participants', 'array-contains', currentUser.email)
+        .onSnapshot(snapshot => {
+          // Private chats
+          let privates = [];
+          snapshot.forEach(doc => {
+            privates.push({ id: doc.id, ...doc.data(), type: 'private' });
+          });
+          // Load groups separately
+          db.collection('groups')
+            .where('members', 'array-contains', currentUser.email)
+            .get()
+            .then(groupsSnap => {
+              let groups = [];
+              groupsSnap.forEach(doc => {
+                groups.push({ id: doc.id, ...doc.data(), type: 'group' });
+              });
+              chats = [...privates, ...groups];
+              renderChatList();
+              if (!currentChatId && chats.length > 0) {
+                selectChat(chats[0].id, chats[0].type);
+              }
+            });
+        });
+    }
+
+    // Render chat list in sidebar
+    function renderChatList() {
+      chatListEl.innerHTML = '';
+      if(chats.length===0) {
+        chatListEl.innerHTML = `<div class="p-4 text-gray-500">No chats yet.</div>`;
+        return;
+      }
+      chats.forEach(chat => {
+        const div = document.createElement('div');
+        div.tabIndex = 0;
+        div.role = 'listitem';
+        div.className = 'cursor-pointer px-4 py-3 hover:bg-gray-700 flex items-center space-x-3';
+        if (chat.id === currentChatId) div.classList.add('bg-indigo-600');
+        // Title
+        let title = '';
+        if (chat.type === 'private') {
+          // Show other participant's email or name
+          title = chat.participants.find(e => e !== currentUser.email);
+        } else {
+          title = chat.name || 'Unnamed Group';
+        }
+        div.textContent = title;
+        div.onclick = () => selectChat(chat.id, chat.type);
+        div.onkeypress = e => { if(e.key==='Enter') selectChat(chat.id, chat.type); };
+        chatListEl.appendChild(div);
+      });
+    }
+
+    // Select a chat to load messages
+    async function selectChat(chatId, chatType) {
+      if(unsubscribeMessages) unsubscribeMessages();
+
+      currentChatId = chatId;
+      currentChatType = chatType;
+
+      // Update header title
+      let chat = chats.find(c => c.id === chatId);
+      if (!chat) return;
+
+      if(chatType==='private'){
+        let otherEmail = chat.participants.find(e => e !== currentUser.email);
+        chatTitleEl.textContent = otherEmail;
+        chatSubtitleEl.textContent = "Private Chat";
+      } else {
+        chatTitleEl.textContent = chat.name || 'Unnamed Group';
+        chatSubtitleEl.textContent = `Group Chat - ${chat.members.length} members`;
+      }
+
+      // Clear previous messages
+      messagesEl.innerHTML = '';
+      typingIndicatorEl.textContent = '';
+
+      // Subscribe to messages
+      let messagesCol = (chatType === 'private' ? 
+        db.collection('privateChats').doc(chatId).collection('messages') :
+        db.collection('groups').doc(chatId).collection('messages'));
+
+      unsubscribeMessages = messagesCol.orderBy('createdAt')
+        .onSnapshot(snapshot => {
+          snapshot.docChanges().forEach(change => {
+            if (change.type === 'added') {
+              const msg = change.doc.data();
+              displayMessage(change.doc.id, msg);
+            }
+            if (change.type === 'removed') {
+              // Optionally handle removed messages
+            }
+          });
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        });
+
+      // Load chat details panel data if open
+      if(!chatDetailsPanel.classList.contains('
+              groupsSnap.forEach(doc => {
+                groups.push({ id: doc.id, ...doc.data(), type: 'group' });
+              });
+
+              chats = [...privates, ...groups];
+              renderChatList();
+
+              // Auto select first chat if none selected
+              if (!currentChatId && chats.length > 0) {
+                selectChat(chats[0].id, chats[0].type);
+              }
+            });
+        });
+    }
+
+    // Render chat list in sidebar
+    function renderChatList() {
+      chatListEl.innerHTML = '';
+      if (chats.length === 0) {
+        chatListEl.innerHTML = '<p class="p-4 text-gray-500">No chats found.</p>';
+        return;
+      }
+      chats.forEach(chat => {
+        const div = document.createElement('div');
+        div.tabIndex = 0;
+        div.className = `cursor-pointer px-4 py-3 hover:bg-gray-700 rounded-md truncate 
+          ${chat.id === currentChatId ? 'bg-indigo-600 text-white' : 'text-gray-300'}`;
+        div.title = chat.type === 'group' ? chat.groupName : chat.participants.filter(p => p !== currentUser.email)[0];
+
+        if (chat.type === 'group') {
+          div.textContent = chat.groupName;
+        } else {
+          // For private, show other user's email or name
+          const otherEmail = chat.participants.find(p => p !== currentUser.email);
+          div.textContent = otherEmail;
+        }
+        div.onclick = () => selectChat(chat.id, chat.type);
+        div.onkeypress = e => { if (e.key === 'Enter') selectChat(chat.id, chat.type); };
+
+        chatListEl.appendChild(div);
+      });
+    }
+
+    // Select a chat by ID and type
+    function selectChat(chatId, chatType) {
+      if (unsubscribeMessages) unsubscribeMessages();
+      currentChatId = chatId;
+      currentChatType = chatType;
+
+      // Highlight selected in sidebar
+      renderChatList();
+
+      // Set chat header info
+      if (chatType === 'group') {
+        const chat = chats.find(c => c.id === chatId);
+        chatTitleEl.textContent = chat.groupName || 'Group Chat';
+        chatSubtitleEl.textContent = `Members: ${chat.members.length}`;
+      } else {
+        // Private chat - show other user email
+        const chat = chats.find(c => c.id === chatId);
+        const otherEmail = chat.participants.find(p => p !== currentUser.email);
+        chatTitleEl.textContent = otherEmail;
+        chatSubtitleEl.textContent = 'Private chat';
+      }
+
+      messagesEl.innerHTML = '';
+      typingIndicatorEl.textContent = '';
+
+      // Subscribe to messages collection
+      unsubscribeMessages = db.collection('messages')
+        .where('chatId', '==', chatId)
+        .orderBy('createdAt')
+        .onSnapshot(snapshot => {
+          messagesEl.innerHTML = '';
+          snapshot.forEach(doc => {
+            const msg = doc.data();
+            appendMessage(msg, doc.id);
+          });
+          // Scroll to bottom
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        });
+
+      // Setup typing indicator
+      setupTypingIndicator(chatId);
+      
+      // Hide chat details panel when chat changes
+      chatDetailsPanel.classList.add('hidden');
+    }
+
+    // Append a single message to messages container
+    function appendMessage(msg, id) {
+      const div = document.createElement('div');
+      div.className = `flex space-x-3 ${msg.sender === currentUser.email ? 'justify-end' : 'justify-start'}`;
+      const bubble = document.createElement('div');
+      bubble.className = `
+        max-w-[70%] px-4 py-2 rounded-lg whitespace-pre-wrap
+        ${msg.sender === currentUser.email ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-gray-700 text-gray-200 rounded-bl-none'}`;
+
+      if (msg.type === 'text') {
+        bubble.textContent = msg.text;
+      } else if (msg.type === 'image') {
+        const img = document.createElement('img');
+        img.src = msg.imageUrl;
+        img.alt = 'Image message';
+        img.className = 'max-w-full rounded cursor-pointer message-image';
+        img.onclick = () => window.open(msg.imageUrl, '_blank');
+        bubble.appendChild(img);
+      } else if (msg.type === 'emoji') {
+        bubble.textContent = msg.text; // Just emoji char(s)
+      }
+      div.appendChild(bubble);
+      messagesEl.appendChild(div);
+    }
+
+    // Handle message form submission
+    messageForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      if (!messageInput.value.trim() && !imageUpload.files.length) return;
+
+      let msgData = {
+        chatId: currentChatId,
+        sender: currentUser.email,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        type: 'text',
+        text: messageInput.value.trim(),
+      };
+
+      // If an image is selected, upload it first
+      if (imageUpload.files.length) {
+        const file = imageUpload.files[0];
+        const filePath = `chatImages/${currentChatId}/${Date.now()}_${file.name}`;
+        const storageRef = storage.ref(filePath);
+
+        const uploadTask = storageRef.put(file);
+        // Await upload
+        await uploadTask;
+
+        const imageUrl = await storageRef.getDownloadURL();
+        msgData = {
+          chatId: currentChatId,
+          sender: currentUser.email,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          type: 'image',
+          imageUrl,
+        };
+        imageUpload.value = '';
+      } else if (messageInput.value.trim().startsWith(':')) {
+        // Simple emoji detect (optional)
+        msgData.type = 'emoji';
+        msgData.text = messageInput.value.trim();
+      }
+
+      await db.collection('messages').add(msgData);
+      messageInput.value = '';
+      typingIndicatorEl.textContent = '';
+      updateTyping(false);
+    });
+
+    // Typing indicator support
+    let typingTimeoutId = null;
+    messageInput.addEventListener('input', () => {
+      if (!currentChatId) return;
+      updateTyping(true);
+      if (typingTimeoutId) clearTimeout(typingTimeoutId);
+      typingTimeoutId = setTimeout(() => updateTyping(false), 1500);
+    });
+
+    function setupTypingIndicator(chatId) {
+      if (typingRef) typingRef.off();
+      typingIndicatorEl.textContent = '';
+      const typingDoc = db.collection('typing').doc(chatId);
+      typingRef = typingDoc.onSnapshot(doc => {
+        if (!doc.exists) {
+          typingIndicatorEl.textContent = '';
+          return;
+        }
+        const typingData = doc.data();
+        const othersTyping = Object.entries(typingData)
+          .filter(([user, isTyping]) => user !== currentUser.email && isTyping);
+        if (othersTyping.length > 0) {
+          typingIndicatorEl.textContent = `${othersTyping.map(t => t[0]).join(', ')} typing...`;
+        } else {
+          typingIndicatorEl.textContent = '';
+        }
+      });
+    }
+
+    // Update typing status in Firestore
+    function updateTyping(isTyping) {
+      if (!currentChatId) return;
+      const typingDoc = db.collection('typing').doc(currentChatId);
+      typingDoc.set({
+        [currentUser.email]: isTyping
+      }, { merge: true });
+    }
+
+    // Emoji picker toggle
+    btnEmojiToggle.onclick = () => {
+      emojiPicker.classList.toggle('hidden');
+    };
+
+    // Populate emoji picker with common emojis
+    const emojis = ['😀','😁','😂','🤣','😃','😄','😅','😆','😉','😊','😋','😎','😍','😘','😗','😙','😚','🙂','🤗','🤔','😐','😑','😶','🙄','😏','😣','😥','😮','🤐','😯','😪','😫','😴','😌','😛','😜','😝','🤤','😒','😓','😔','😕','🙃','🤑','😲','☹️','🙁','😖','😞','😟','😤','😢','😭','😦','😧','😨','😩','🤯','😬','😰','😱','🥵','🥶','😳','🤪','😵','😡','😠','🤬','😷','🤒','🤕','🤢','🤮','🤧','😇','🥳','🥺','🤠','🥴','😈','👿','👹','👺','💀','☠️','👻','👽','🤖','💩'];
+
+    emojis.forEach(e => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = e;
+      btn.onclick = () => {
+        messageInput.value += e;
+        messageInput.focus();
+      };
+      emojiPicker.appendChild(btn);
+    });
+
+    // Show/hide chat details panel
+    btnShowDetails.onclick = () => {
+      if (!currentChatId) return;
+      if (chatDetailsPanel.classList.contains('hidden')) {
+        loadChatDetails();
+        chatDetailsPanel.classList.remove('hidden');
+      } else {
+        chatDetailsPanel.classList.add('hidden');
+      }
+    };
+
+    // Load chat details content
+    async function loadChatDetails() {
+      chatDetailsContent.innerHTML = '';
+      if (currentChatType === 'group') {
+        const chat = chats.find(c => c.id === currentChatId);
+        const members = chat.members || [];
+        chatDetailsContent.innerHTML = `<h3 class="text-lg font-semibold mb-2">Members (${members.length})</h3>`;
+        const ul = document.createElement('ul');
+        members.forEach(m => {
+          const li = document.createElement('li');
+          li.textContent = m;
+          ul.appendChild(li);
+        });
+        chatDetailsContent.appendChild(ul);
+
+        // You can add more details like shared files or links here
+      } else {
+        // Private chat details
+        chatDetailsContent.textContent = 'Private chat details not available.';
+      }
+    }
+
+    // User sign out
+    btnSignOut.onclick = () => {
+      auth.signOut();
+    };
+
+    // On auth state change
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        currentUser = user;
+        userDisplayName.textContent = user.email;
+        loginPanel.classList.add('hidden');
+        chatApp.classList.remove('hidden');
+        fetchChats();
+      } else {
+        currentUser = null;
+        loginPanel.classList.remove('hidden');
+        chatApp.classList.add('hidden');
+        if (unsubscribeMessages) unsubscribeMessages();
+      }
+    });
+
+    // Handle login form submission
+    loginForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const email = loginEmail.value.trim();
+      const password = loginPassword.value.trim();
+      try {
+        await auth.signInWithEmailAndPassword(email, password);
+        loginEmail.value = '';
+        loginPassword.value = '';
+      } catch (error) {
+        alert('Login failed: ' + error.message);
+      }
+    });
+
+    // Handle signup form submission
+    signupForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const email = signupEmail.value.trim();
+      const password = signupPassword.value.trim();
+      try {
+        await auth.createUserWithEmailAndPassword(email, password);
+        signupEmail.value = '';
+        signupPassword.value = '';
+      } catch (error) {
+        alert('Signup failed: ' + error.message);
+      }
+    });
+  </script>
 </body>
 </html>
