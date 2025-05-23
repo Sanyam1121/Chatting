@@ -2,18 +2,20 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Chat App - ONlyforHer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.min.js"></script>
   </head>
   <body class="min-h-screen bg-gray-100 dark:bg-gray-900 text-black dark:text-white flex flex-col items-center p-4">
     <div id="auth-section" class="w-full max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <h1 class="text-xl font-bold mb-4">Chat Login</h1>
+      <h1 class="text-xl font-bold mb-4">Chat Login / Sign Up</h1>
+      <input id="username" type="text" placeholder="Username (for Sign Up)" class="w-full border rounded p-2 mb-2 text-black" />
       <input id="email" type="email" placeholder="Email" class="w-full border rounded p-2 mb-2 text-black" />
       <input id="password" type="password" placeholder="Password" class="w-full border rounded p-2 mb-2 text-black" />
       <button onclick="login()" class="bg-blue-500 text-white px-4 py-2 rounded w-full mb-2">Login</button>
       <button onclick="signup()" class="bg-green-500 text-white px-4 py-2 rounded w-full mb-2">Sign Up</button>
+      <p class="text-xs text-gray-500">* Enter username only when signing up</p>
     </div>
 
     <div id="chat-ui" class="hidden w-full max-w-2xl flex flex-col bg-white dark:bg-gray-800 rounded shadow-lg h-[85vh] mt-6">
@@ -64,8 +66,10 @@
         query,
         orderBy,
         doc,
+        getDoc,
         getDocs,
         deleteDoc,
+        setDoc,
         serverTimestamp
       } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
       import {
@@ -92,27 +96,60 @@
 
       let currentGroupId = null;
       let selectedImage = null;
+      let currentUsername = null;
 
+      const usernameEl = document.getElementById("username");
       const emailEl = document.getElementById("email");
       const passEl = document.getElementById("password");
 
-      async function login() {
-        const email = emailEl.value;
+      async function signup() {
+        const username = usernameEl.value.trim();
+        const email = emailEl.value.trim();
         const password = passEl.value;
+
+        if (!username) return alert("Please enter a username for sign up.");
+        if (!email) return alert("Please enter an email.");
+        if (!password) return alert("Please enter a password.");
+
         try {
-          await signInWithEmailAndPassword(auth, email, password);
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+          const user = userCredential.user;
+
+          // Save username to Firestore under 'users' collection, document ID = user.uid
+          await setDoc(doc(db, "users", user.uid), { username });
+
+          currentUsername = username;
+          usernameEl.value = "";
+          emailEl.value = "";
+          passEl.value = "";
         } catch (e) {
-          alert("Login failed: " + e.message);
+          alert("Signup failed: " + e.message);
         }
       }
 
-      async function signup() {
-        const email = emailEl.value;
+      async function login() {
+        const email = emailEl.value.trim();
         const password = passEl.value;
+        if (!email) return alert("Please enter your email.");
+        if (!password) return alert("Please enter your password.");
+
         try {
-          await createUserWithEmailAndPassword(auth, email, password);
+          const userCredential = await signInWithEmailAndPassword(auth, email, password);
+          const user = userCredential.user;
+
+          // Fetch username from Firestore
+          const userDoc = await getDoc(doc(db, "users", user.uid));
+          if (userDoc.exists()) {
+            currentUsername = userDoc.data().username || user.email;
+          } else {
+            currentUsername = user.email;
+          }
+
+          usernameEl.value = "";
+          emailEl.value = "";
+          passEl.value = "";
         } catch (e) {
-          alert("Signup failed: " + e.message);
+          alert("Login failed: " + e.message);
         }
       }
 
@@ -120,16 +157,21 @@
       window.login = login;
       window.signup = signup;
 
-      onAuthStateChanged(auth, user => {
+      onAuthStateChanged(auth, async (user) => {
         if (user) {
+          // Load username on auth state change
+          const userDoc = await getDoc(doc(db, "users", user.uid));
+          currentUsername = userDoc.exists() ? userDoc.data().username : user.email;
+
           document.getElementById("auth-section").style.display = "none";
           document.getElementById("chat-ui").classList.remove("hidden");
-          document.getElementById("currentUserLabel").textContent = `Logged in as: ${user.email}`;
+          document.getElementById("currentUserLabel").textContent = `Logged in as: ${currentUsername}`;
           loadGroups();
         } else {
+          currentGroupId = null;
+          currentUsername = null;
           document.getElementById("auth-section").style.display = "block";
           document.getElementById("chat-ui").classList.add("hidden");
-          currentGroupId = null;
         }
       });
 
@@ -137,7 +179,6 @@
         await signOut(auth);
       }
       window.logout = logout;
-
       document.getElementById("logoutBtn").addEventListener("click", logout);
 
       function loadGroups() {
@@ -219,84 +260,81 @@
 
         let imageUrl = null;
         if (selectedImage) {
-          const imageRef = ref(storage, `images/${Date.now()}_${selectedImage.name}`);
-          await uploadBytes(imageRef, selectedImage);
-          imageUrl = await getDownloadURL(imageRef);
+          const storageRef = ref(storage, `images/${Date.now()}_${selectedImage.name}`);
+          await uploadBytes(storageRef, selectedImage);
+          imageUrl = await getDownloadURL(storageRef);
           selectedImage = null;
           document.getElementById("imageInput").value = "";
         }
 
         await addDoc(collection(db, "groups", currentGroupId, "messages"), {
-          sender: user.email,
-          text: text || null,
-          imageUrl,
-          createdAt: serverTimestamp()
+          text: text || "",
+          imageUrl: imageUrl,
+          createdAt: serverTimestamp(),
+          uid: user.uid,
+          username: currentUsername || user.email
         });
 
         document.getElementById("messageInput").value = "";
       };
 
+      function previewImage(event) {
+        selectedImage = event.target.files[0];
+      }
+
       function listenToMessages(groupId) {
         const messagesDiv = document.getElementById("messages");
         messagesDiv.innerHTML = "Loading messages...";
         const messagesRef = collection(db, "groups", groupId, "messages");
-        const q = query(messagesRef, orderBy("createdAt"));
-
-        onSnapshot(q, snapshot => {
+        const q = query(messagesRef, orderBy("createdAt", "asc"));
+        onSnapshot(q, (snapshot) => {
           messagesDiv.innerHTML = "";
           snapshot.forEach(docSnap => {
             const msg = docSnap.data();
-            const msgDiv = document.createElement("div");
-            msgDiv.className = "mb-2";
+            const messageEl = document.createElement("div");
+            messageEl.className = "border rounded p-2";
 
-            const sender = document.createElement("div");
-            sender.textContent = msg.sender;
-            sender.className = "text-xs font-semibold";
+            const usernameEl = document.createElement("div");
+            usernameEl.textContent = msg.username || "Unknown";
+            usernameEl.className = "font-semibold text-blue-600";
 
-            msgDiv.appendChild(sender);
+            const textEl = document.createElement("div");
+            textEl.textContent = msg.text;
 
-            if (msg.text) {
-              const textDiv = document.createElement("div");
-              textDiv.textContent = msg.text;
-              textDiv.className = "p-2 bg-blue-100 dark:bg-blue-700 rounded max-w-xs break-words";
-              msgDiv.appendChild(textDiv);
-            }
-
+            messageEl.appendChild(usernameEl);
             if (msg.imageUrl) {
-              const img = document.createElement("img");
-              img.src = msg.imageUrl;
-              img.alt = "Image";
-              img.className = "max-w-xs rounded mt-1 cursor-pointer";
-              img.onclick = () => window.open(msg.imageUrl, "_blank");
-              msgDiv.appendChild(img);
+              const imgEl = document.createElement("img");
+              imgEl.src = msg.imageUrl;
+              imgEl.alt = "sent image";
+              imgEl.className = "max-w-xs rounded my-2";
+              messageEl.appendChild(imgEl);
             }
-
-            messagesDiv.appendChild(msgDiv);
+            messageEl.appendChild(textEl);
+            messagesDiv.appendChild(messageEl);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
           });
-
-          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+          if (snapshot.empty) {
+            messagesDiv.innerHTML = "<p class='text-gray-500 italic'>No messages yet. Say hi!</p>";
+          }
         });
       }
 
-      window.previewImage = e => {
-        selectedImage = e.target.files[0];
-      };
-
-      // Emoji picker setup
-      const picker = new EmojiButton({
-        position: 'top-start',
+      // Emoji picker integration
+      const emojiPicker = new EmojiButton({
+        position: 'top-end',
         theme: 'auto',
+        autoHide: true,
       });
-
       const emojiBtn = document.getElementById("emojiBtn");
       const messageInput = document.getElementById("messageInput");
 
-      picker.on("emoji", emoji => {
-        messageInput.value += emoji;
+      emojiBtn.addEventListener("click", () => {
+        emojiPicker.togglePicker(emojiBtn);
       });
 
-      emojiBtn.addEventListener("click", () => {
-        picker.togglePicker(emojiBtn);
+      emojiPicker.on('emoji', emoji => {
+        messageInput.value += emoji;
+        messageInput.focus();
       });
     </script>
   </body>
