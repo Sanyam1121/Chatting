@@ -2,401 +2,148 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chat App - ONlyforHer</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Firebase Chat App</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-storage-compat.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   </head>
-  <body class="min-h-screen bg-gray-100 dark:bg-gray-900 text-black dark:text-white flex flex-col items-center p-4">
-    <div id="auth-section" class="w-full max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <h1 class="text-xl font-bold mb-4">Chat Login / Sign Up</h1>
-      <input id="username" type="text" placeholder="Username (for Sign Up)" class="w-full border rounded p-2 mb-2 text-black" />
-      <input id="email" type="email" placeholder="Email" class="w-full border rounded p-2 mb-2 text-black" />
-      <input id="password" type="password" placeholder="Password" class="w-full border rounded p-2 mb-2 text-black" />
-      <button onclick="login()" class="bg-blue-500 text-white px-4 py-2 rounded w-full mb-2">Login</button>
-      <button onclick="signup()" class="bg-green-500 text-white px-4 py-2 rounded w-full mb-2">Sign Up</button>
-      <p class="text-xs text-gray-500">* Enter username only when signing up</p>
+  <body class="bg-gray-900 text-white">
+    <div id="app" class="flex h-screen">
+      <!-- Sidebar -->
+      <aside class="w-1/5 bg-gray-800 p-4 flex flex-col">
+        <h1 class="text-xl font-bold mb-4">Chats</h1>
+        <div id="chatList" class="flex-1 overflow-y-auto"></div>
+        <button id="logout" class="mt-4 bg-red-500 text-white p-2 rounded">Logout</button>
+      </aside>
+
+      <!-- Chat Area -->
+      <main class="flex-1 flex flex-col">
+        <header class="p-4 border-b border-gray-700 flex justify-between items-center">
+          <h2 id="currentChatTitle" class="text-xl font-semibold">Chat</h2>
+        </header>
+        <div id="chatMessages" class="flex-1 p-4 overflow-y-auto space-y-2"></div>
+        <footer class="p-4 border-t border-gray-700 flex items-center gap-2">
+          <input type="text" id="messageInput" placeholder="Type a message..." class="flex-1 p-2 bg-gray-800 text-white rounded" />
+          <input type="file" id="imageInput" class="hidden" />
+          <button id="imageBtn" class="bg-blue-600 p-2 rounded">📷</button>
+          <button id="sendMessage" class="bg-blue-600 p-2 rounded">Send</button>
+        </footer>
+      </main>
+
+      <!-- Details Panel -->
+      <aside class="w-1/5 bg-gray-800 p-4 hidden md:block">
+        <h2 class="text-lg font-semibold">Chat Details</h2>
+        <div id="mediaGallery" class="mt-4 space-y-2"></div>
+      </aside>
     </div>
 
-    <div id="chat-ui" class="hidden w-full max-w-2xl flex flex-col bg-white dark:bg-gray-800 rounded shadow-lg h-[85vh] mt-6">
-      <div id="groupsPage" class="flex flex-col h-full">
-        <div class="font-bold text-lg mb-2 flex justify-between items-center px-4 py-2 border-b dark:border-gray-700">
-          Groups
-          <span id="currentUserLabel" class="text-xs italic"></span>
-          <button id="logoutBtn" class="bg-red-600 text-white px-3 py-1 rounded ml-4">Logout</button>
-        </div>
-        <div id="groupsList" class="flex-1 overflow-y-auto p-4"></div>
-        <div class="flex gap-2 p-4 border-t dark:border-gray-700">
-          <input id="newGroupName" type="text" placeholder="New group name" class="flex-1 border rounded p-2 text-black" />
-          <button onclick="createGroup()" class="bg-green-600 text-white px-4 rounded">Create</button>
-        </div>
-      </div>
-
-      <div id="chatPage" class="hidden flex flex-col h-full">
-        <div class="flex items-center justify-between p-4 border-b dark:border-gray-700">
-          <button onclick="backToGroups()" class="text-blue-600 dark:text-blue-400">← Back to groups</button>
-          <h2 id="groupTitle" class="font-bold text-lg"></h2>
-          <div></div>
-        </div>
-        <div id="messages" class="flex-1 overflow-y-auto p-4 flex flex-col gap-1"></div>
-        <!-- Typing indicator container -->
-        <div id="typingIndicator" class="p-2 text-sm text-gray-600 dark:text-gray-400 italic min-h-[1.25rem]"></div>
-        <div class="p-4 border-t dark:border-gray-700 flex items-center gap-2">
-          <button id="emojiBtn" class="text-xl">😊</button>
-          <input id="messageInput" type="text" placeholder="Type a message" class="flex-1 border rounded p-2 text-black" autocomplete="off" />
-          <input type="file" id="imageInput" accept="image/*" onchange="previewImage(event)" class="hidden" />
-          <button onclick="document.getElementById('imageInput').click()" class="bg-gray-200 dark:bg-gray-700 rounded px-3 py-2">📷</button>
-          <button onclick="sendMessage()" class="bg-blue-600 text-white px-4 py-2 rounded">Send</button>
-        </div>
+    <!-- Login -->
+    <div id="loginScreen" class="fixed inset-0 flex justify-center items-center bg-gray-900 z-50">
+      <div class="bg-gray-800 p-6 rounded shadow-lg w-80">
+        <h2 class="text-xl mb-4">Login</h2>
+        <input id="email" type="email" placeholder="Email" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" />
+        <input id="password" type="password" placeholder="Password" class="w-full p-2 mb-2 bg-gray-700 text-white rounded" />
+        <button id="login" class="w-full bg-blue-600 p-2 rounded">Login</button>
+        <button id="signup" class="w-full mt-2 bg-green-600 p-2 rounded">Sign Up</button>
       </div>
     </div>
 
-    <script type="module">
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-      import {
-        getAuth,
-        createUserWithEmailAndPassword,
-        signInWithEmailAndPassword,
-        onAuthStateChanged,
-        signOut
-      } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-      import {
-        getFirestore,
-        collection,
-        addDoc,
-        onSnapshot,
-        query,
-        orderBy,
-        doc,
-        getDoc,
-        getDocs,
-        deleteDoc,
-        setDoc,
-        serverTimestamp,
-        updateDoc,
-        deleteField
-      } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-      import {
-        getStorage,
-        ref,
-        uploadBytes,
-        getDownloadURL
-      } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+    <script>
+     // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
+  authDomain: "chatting-fd641.firebaseapp.com",
+  projectId: "chatting-fd641",
+  storageBucket: "chatting-fd641.firebasestorage.app",
+  messagingSenderId: "535384451291",
+  appId: "1:535384451291:web:828f60686d81be018b44fe",
+  measurementId: "G-RKS4CFZPJ4"
+};
 
-      const firebaseConfig = {
-        apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
-        authDomain: "chatting-fd641.firebaseapp.com",
-        projectId: "chatting-fd641",
-        storageBucket: "chatting-fd641.appspot.com",
-        messagingSenderId: "535384451291",
-        appId: "1:535384451291:web:828f60686d81be018b44fe",
-        measurementId: "G-RKS4CFZPJ4"
+      firebase.initializeApp(firebaseConfig);
+      const auth = firebase.auth();
+      const db = firebase.firestore();
+      const storage = firebase.storage();
+
+      const loginScreen = document.getElementById('loginScreen');
+      const app = document.getElementById('app');
+      const loginBtn = document.getElementById('login');
+      const signupBtn = document.getElementById('signup');
+      const logoutBtn = document.getElementById('logout');
+      const sendMessageBtn = document.getElementById('sendMessage');
+      const imageBtn = document.getElementById('imageBtn');
+      const imageInput = document.getElementById('imageInput');
+
+      auth.onAuthStateChanged(user => {
+        if (user) {
+          loginScreen.style.display = 'none';
+          app.style.display = 'flex';
+          loadChats();
+        } else {
+          loginScreen.style.display = 'flex';
+          app.style.display = 'none';
+        }
+      });
+
+      loginBtn.onclick = () => {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        auth.signInWithEmailAndPassword(email, password).catch(alert);
       };
 
-      const app = initializeApp(firebaseConfig);
-      const auth = getAuth(app);
-      const db = getFirestore(app);
-      const storage = getStorage(app);
+      signupBtn.onclick = () => {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        auth.createUserWithEmailAndPassword(email, password).catch(alert);
+      };
 
-      let currentGroupId = null;
-      let selectedImage = null;
-      let currentUsername = null;
-      let typingTimeout = null;
+      logoutBtn.onclick = () => auth.signOut();
 
-      const usernameEl = document.getElementById("username");
-      const emailEl = document.getElementById("email");
-      const passEl = document.getElementById("password");
-      const messageInput = document.getElementById("messageInput");
-      const typingIndicator = document.getElementById("typingIndicator");
-
-      async function signup() {
-        const username = usernameEl.value.trim();
-        const email = emailEl.value.trim();
-        const password = passEl.value;
-
-        if (!username) return alert("Please enter a username for sign up.");
-        if (!email) return alert("Please enter an email.");
-        if (!password) return alert("Please enter a password.");
-
-        try {
-          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-          const user = userCredential.user;
-
-          // Save username to Firestore under 'users' collection, document ID = user.uid
-          await setDoc(doc(db, "users", user.uid), { username });
-
-          currentUsername = username;
-          usernameEl.value = "";
-          emailEl.value = "";
-          passEl.value = "";
-        } catch (e) {
-          alert("Signup failed: " + e.message);
-        }
-      }
-
-      async function login() {
-        const email = emailEl.value.trim();
-        const password = passEl.value;
-        if (!email) return alert("Please enter your email.");
-        if (!password) return alert("Please enter your password.");
-
-        try {
-          const userCredential = await signInWithEmailAndPassword(auth, email, password);
-          const user = userCredential.user;
-
-          // Fetch username from Firestore
-          const userDoc = await getDoc(doc(db, "users", user.uid));
-          if (userDoc.exists()) {
-            currentUsername = userDoc.data().username || user.email;
-          } else {
-            currentUsername = user.email;
-          }
-
-          usernameEl.value = "";
-          emailEl.value = "";
-          passEl.value = "";
-        } catch (e) {
-          alert("Login failed: " + e.message);
-        }
-      }
-
-      // Expose login/signup to global scope for inline onclick
-      window.login = login;
-      window.signup = signup;
-
-      onAuthStateChanged(auth, async (user) => {
-        if (user) {
-          // Load username on auth state change
-          const userDoc = await getDoc(doc(db, "users", user.uid));
-          currentUsername = userDoc.exists() ? userDoc.data().username : user.email;
-
-          document.getElementById("auth-section").style.display = "none";
-          document.getElementById("chat-ui").classList.remove("hidden");
-          document.getElementById("currentUserLabel").textContent = `Logged in as: ${currentUsername}`;
-          loadGroups();
-        } else {
-          currentGroupId = null;
-          currentUsername = null;
-          document.getElementById("auth-section").style.display = "block";
-          document.getElementById("chat-ui").classList.add("hidden");
-        }
-      });
-
-      async function logout() {
-        await clearTypingStatus();
-        await signOut(auth);
-      }
-      window.logout = logout;
-      document.getElementById("logoutBtn").addEventListener("click", logout);
-
-      function loadGroups() {
-        const groupsList = document.getElementById("groupsList");
-        groupsList.innerHTML = "Loading groups...";
-        const groupsRef = collection(db, "groups");
-        onSnapshot(groupsRef, snapshot => {
-          groupsList.innerHTML = "";
-          if (snapshot.empty) {
-            groupsList.innerHTML = "<p class='text-gray-500'>No groups yet. Create one!</p>";
-            return;
-          }
-          snapshot.forEach(docSnap => {
-            const group = docSnap.data();
-            const groupId = docSnap.id;
-            const btn = document.createElement("button");
-            btn.textContent = group.name;
-            btn.className = "w-full text-left p-2 rounded hover:bg-blue-100 dark:hover:bg-blue-700";
-            btn.onclick = () => openGroupChat(groupId, group.name);
-            groupsList.appendChild(btn);
-          });
+      sendMessageBtn.onclick = async () => {
+        const msg = document.getElementById('messageInput').value;
+        if (!msg.trim()) return;
+        await db.collection('messages').add({
+          uid: auth.currentUser.uid,
+          text: msg,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-      }
+        document.getElementById('messageInput').value = '';
+      };
 
-      async function createGroup() {
-        const name = document.getElementById("newGroupName").value.trim();
-        if (!name) return alert("Please enter a group name");
-        try {
-          await addDoc(collection(db, "groups"), { name, createdAt: serverTimestamp() });
-          document.getElementById("newGroupName").value = "";
-        } catch (e) {
-          alert("Failed to create group: " + e.message);
-        }
-      }
-      window.createGroup = createGroup;
-
-      function backToGroups() {
-        clearChatUI();
-        clearTypingStatus();
-        document.getElementById("chatPage").classList.add("hidden");
-        document.getElementById("groupsPage").classList.remove("hidden");
-        currentGroupId = null;
-      }
-      window.backToGroups = backToGroups;
-
-      let unsubscribeMessages = null;
-      let unsubscribeTyping = null;
-
-      async function openGroupChat(groupId, groupName) {
-        if (unsubscribeMessages) unsubscribeMessages();
-        if (unsubscribeTyping) unsubscribeTyping();
-        await clearTypingStatus();
-
-        currentGroupId = groupId;
-
-        document.getElementById("groupTitle").textContent = groupName;
-        document.getElementById("groupsPage").classList.add("hidden");
-        document.getElementById("chatPage").classList.remove("hidden");
-
-        const messagesDiv = document.getElementById("messages");
-        messagesDiv.innerHTML = "Loading messages...";
-
-        const messagesRef = collection(db, "groups", groupId, "messages");
-        const q = query(messagesRef, orderBy("createdAt", "asc"));
-        unsubscribeMessages = onSnapshot(q, snapshot => {
-          messagesDiv.innerHTML = "";
-          snapshot.forEach(docSnap => {
-            const msg = docSnap.data();
-            const messageEl = document.createElement("div");
-            messageEl.className = msg.sender === currentUsername ? "self-end bg-blue-200 dark:bg-blue-700 p-2 rounded max-w-xs break-words" : "self-start bg-gray-200 dark:bg-gray-700 p-2 rounded max-w-xs break-words";
-            if (msg.imageUrl) {
-              const img = document.createElement("img");
-              img.src = msg.imageUrl;
-              img.alt = "Image";
-              img.className = "max-w-xs rounded mb-1 cursor-pointer";
-              img.onclick = () => window.open(msg.imageUrl, "_blank");
-              messageEl.appendChild(img);
-            }
-            if (msg.text) {
-              const textNode = document.createElement("div");
-              textNode.textContent = msg.text;
-              messageEl.appendChild(textNode);
-            }
-            const senderEl = document.createElement("div");
-            senderEl.className = "text-xs text-gray-600 dark:text-gray-400";
-            senderEl.textContent = msg.sender;
-            messageEl.appendChild(senderEl);
-            messagesDiv.appendChild(messageEl);
-          });
-          messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        });
-
-        // Listen for typing status in this group
-        const typingRef = doc(db, "groups", groupId, "typingStatus", "statusDoc");
-        unsubscribeTyping = onSnapshot(typingRef, (docSnap) => {
-          if (!docSnap.exists()) {
-            typingIndicator.textContent = "";
-            return;
-          }
-          const typingData = docSnap.data();
-          // typingData is like {userId1: username1, userId2: username2, ...}
-          // Remove self and get list of other typing usernames
-          const otherTypers = [];
-          for (const [uid, username] of Object.entries(typingData)) {
-            if (uid !== auth.currentUser.uid) otherTypers.push(username);
-          }
-          if (otherTypers.length === 0) {
-            typingIndicator.textContent = "";
-          } else if (otherTypers.length === 1) {
-            typingIndicator.textContent = `${otherTypers[0]} is typing...`;
-          } else if (otherTypers.length === 2) {
-            typingIndicator.textContent = `${otherTypers[0]} and ${otherTypers[1]} are typing...`;
-          } else {
-            typingIndicator.textContent = `${otherTypers.slice(0, -1).join(", ")}, and ${otherTypers.slice(-1)} are typing...`;
-          }
-        });
-
-        messageInput.focus();
-      }
-
-      function clearChatUI() {
-        const messagesDiv = document.getElementById("messages");
-        messagesDiv.innerHTML = "";
-        typingIndicator.textContent = "";
-        messageInput.value = "";
-        selectedImage = null;
-      }
-
-      function previewImage(event) {
-        const file = event.target.files[0];
+      imageBtn.onclick = () => imageInput.click();
+      imageInput.onchange = async e => {
+        const file = e.target.files[0];
         if (!file) return;
-        selectedImage = file;
-      }
-      window.previewImage = previewImage;
-
-      async function sendMessage() {
-        if (!currentGroupId) return alert("Please select a group first.");
-        const text = messageInput.value.trim();
-        if (!text && !selectedImage) return alert("Enter a message or select an image to send.");
-
-        const messagesRef = collection(db, "groups", currentGroupId, "messages");
-
-        let imageUrl = null;
-        if (selectedImage) {
-          try {
-            const storageRef = ref(storage, `images/${currentGroupId}/${Date.now()}_${selectedImage.name}`);
-            await uploadBytes(storageRef, selectedImage);
-            imageUrl = await getDownloadURL(storageRef);
-            selectedImage = null;
-            document.getElementById("imageInput").value = "";
-          } catch (e) {
-            alert("Failed to upload image: " + e.message);
-            return;
-          }
-        }
-
-        await addDoc(messagesRef, {
-          sender: currentUsername,
-          text: text || "",
-          imageUrl: imageUrl,
-          createdAt: serverTimestamp()
+        const ref = storage.ref().child(`images/${Date.now()}_${file.name}`);
+        await ref.put(file);
+        const url = await ref.getDownloadURL();
+        await db.collection('messages').add({
+          uid: auth.currentUser.uid,
+          imageUrl: url,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
+      };
 
-        messageInput.value = "";
-        await clearTypingStatus();
-      }
-      window.sendMessage = sendMessage;
-
-      // TYPING INDICATOR LOGIC
-
-      // On input, set typing status in Firestore, then clear after timeout
-      messageInput.addEventListener("input", async () => {
-        if (!currentGroupId) return;
-        const typingRef = doc(db, "groups", currentGroupId, "typingStatus", "statusDoc");
-        try {
-          await updateDoc(typingRef, {
-            [auth.currentUser.uid]: currentUsername
-          }).catch(async (e) => {
-            // If doc doesn't exist, create it
-            if (e.code === "not-found") {
-              await setDoc(typingRef, {
-                [auth.currentUser.uid]: currentUsername
-              });
+      function loadChats() {
+        const chatMessages = document.getElementById('chatMessages');
+        db.collection('messages').orderBy('createdAt').onSnapshot(snapshot => {
+          chatMessages.innerHTML = '';
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            const div = document.createElement('div');
+            if (data.text) {
+              div.textContent = data.text;
+            } else if (data.imageUrl) {
+              div.innerHTML = `<img src="${data.imageUrl}" class="max-w-xs rounded" />`;
             }
+            chatMessages.appendChild(div);
           });
-        } catch (e) {
-          console.error("Error setting typing status:", e);
-        }
-
-        // Reset timeout to clear typing after 2 seconds of no typing
-        if (typingTimeout) clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(clearTypingStatus, 2000);
-      });
-
-      async function clearTypingStatus() {
-        if (!currentGroupId || !auth.currentUser) return;
-        const typingRef = doc(db, "groups", currentGroupId, "typingStatus", "statusDoc");
-        try {
-          await updateDoc(typingRef, {
-            [auth.currentUser.uid]: deleteField()
-          });
-        } catch (e) {
-          // If doc doesn't exist or field not present, ignore
-        }
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        });
       }
-
-      // Clear typing status when window/tab is closed or navigated away
-      window.addEventListener("beforeunload", async () => {
-        await clearTypingStatus();
-      });
     </script>
   </body>
 </html>
