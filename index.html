@@ -1,401 +1,447 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Firebase Group Chat App</title>
-    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-storage-compat.js"></script>
-    <link
-      href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
-      rel="stylesheet"
-    />
-    <style>
-      /* Circle style for groups */
-      .group-circle {
-        width: 50px;
-        height: 50px;
-        border-radius: 50%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background-color: #374151; /* Tailwind gray-700 */
-        color: white;
-        font-weight: bold;
-        font-size: 1rem;
-        cursor: pointer;
-        user-select: none;
-        transition: background-color 0.2s;
-      }
-      .group-circle:hover {
-        background-color: #2563eb; /* Tailwind blue-600 */
-      }
-      .group-circle.selected {
-        background-color: #1d4ed8; /* Tailwind blue-700 */
-        font-weight: 900;
-      }
-      #chatList {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        overflow-y: auto;
-      }
-    </style>
-  </head>
-  <body class="bg-gray-900 text-white">
-    <div id="app" class="flex h-screen">
-      <!-- Sidebar -->
-      <aside
-        class="w-1/5 bg-gray-800 p-4 flex flex-col items-center space-y-4 overflow-y-auto"
+<html lang="en" >
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Firebase Group Chat App - Merged</title>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-storage-compat.js"></script>
+
+  <!-- Tailwind CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+
+  <style>
+    /* Group circles style */
+    .group-circle {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: #374151; /* Tailwind gray-700 */
+      color: white;
+      font-weight: bold;
+      font-size: 1rem;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.2s;
+      flex-shrink: 0;
+    }
+    .group-circle:hover {
+      background-color: #2563eb; /* Tailwind blue-600 */
+    }
+    .group-circle.selected {
+      background-color: #1d4ed8; /* Tailwind blue-700 */
+      font-weight: 900;
+    }
+
+    /* Scroll styling */
+    #chatList {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+      max-height: calc(100vh - 140px); /* space for logout button and header */
+      padding-bottom: 10px;
+    }
+
+    /* Scrollbar for chat messages */
+    #chatMessages {
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body class="bg-gray-900 text-white flex flex-col min-h-screen">
+
+  <!-- Login Screen -->
+  <div
+    id="loginScreen"
+    class="fixed inset-0 flex justify-center items-center bg-gray-900 z-50"
+  >
+    <div class="bg-gray-800 p-6 rounded shadow-lg w-80">
+      <h2 class="text-xl mb-4">Login</h2>
+      <input
+        id="email"
+        type="email"
+        placeholder="Email"
+        class="w-full p-2 mb-2 bg-gray-700 text-white rounded"
+      />
+      <input
+        id="password"
+        type="password"
+        placeholder="Password"
+        class="w-full p-2 mb-2 bg-gray-700 text-white rounded"
+      />
+      <button id="login" class="w-full bg-blue-600 p-2 rounded">Login</button>
+      <button
+        id="signup"
+        class="w-full mt-2 bg-green-600 p-2 rounded"
       >
-        <h1 class="text-xl font-bold mb-4">Groups</h1>
-        <div id="chatList" class="flex flex-col items-center flex-grow"></div>
-        <button
-          id="logout"
-          class="mt-4 bg-red-500 text-white p-2 rounded w-full max-w-xs"
-        >
-          Logout
-        </button>
-      </aside>
-
-      <!-- Chat Area -->
-      <main class="flex-1 flex flex-col">
-        <header
-          class="p-4 border-b border-gray-700 flex justify-between items-center"
-        >
-          <h2 id="currentChatTitle" class="text-xl font-semibold">Chat</h2>
-        </header>
-        <div
-          id="chatMessages"
-          class="flex-1 p-4 overflow-y-auto space-y-2 bg-gray-900"
-        >
-          <p class="text-gray-400 text-center mt-10">
-            Select a group to start chatting
-          </p>
-        </div>
-        <footer
-          class="p-4 border-t border-gray-700 flex items-center gap-2 bg-gray-800"
-        >
-          <input
-            type="text"
-            id="messageInput"
-            placeholder="Type a message..."
-            class="flex-1 p-2 bg-gray-700 text-white rounded"
-            disabled
-          />
-          <input type="file" id="imageInput" class="hidden" />
-          <button
-            id="imageBtn"
-            class="bg-blue-600 p-2 rounded"
-            disabled
-            title="Send image"
-          >
-            📷
-          </button>
-          <button
-            id="sendMessage"
-            class="bg-blue-600 p-2 rounded"
-            disabled
-            title="Send message"
-          >
-            Send
-          </button>
-        </footer>
-      </main>
-
-      <!-- Details Panel -->
-      <aside class="w-1/5 bg-gray-800 p-4 hidden md:block">
-        <h2 class="text-lg font-semibold">Chat Details</h2>
-        <div id="mediaGallery" class="mt-4 space-y-2"></div>
-      </aside>
+        Sign Up
+      </button>
     </div>
+  </div>
 
-    <!-- Login -->
-    <div
-      id="loginScreen"
-      class="fixed inset-0 flex justify-center items-center bg-gray-900 z-50"
+  <!-- App Container -->
+  <div id="app" class="hidden flex-1 flex overflow-hidden">
+    <!-- Left Sidebar with Group Circles -->
+    <aside
+      class="w-1/5 bg-gray-800 p-4 flex flex-col items-center space-y-4"
     >
-      <div class="bg-gray-800 p-6 rounded shadow-lg w-80">
-        <h2 class="text-xl mb-4">Login</h2>
-        <input
-          id="email"
-          type="email"
-          placeholder="Email"
-          class="w-full p-2 mb-2 bg-gray-700 text-white rounded"
-        />
-        <input
-          id="password"
-          type="password"
-          placeholder="Password"
-          class="w-full p-2 mb-2 bg-gray-700 text-white rounded"
-        />
-        <button id="login" class="w-full bg-blue-600 p-2 rounded">Login</button>
-        <button
-          id="signup"
-          class="w-full mt-2 bg-green-600 p-2 rounded"
-        >
-          Sign Up
-        </button>
+      <h1 class="text-xl font-bold mb-4">Groups</h1>
+      <div id="chatList"></div>
+      <button
+        id="logout"
+        class="mt-auto bg-red-500 text-white p-2 rounded w-full max-w-xs"
+      >
+        Logout
+      </button>
+    </aside>
+
+    <!-- Chat Area -->
+    <main class="flex-1 flex flex-col bg-gray-900">
+      <header
+        class="p-4 border-b border-gray-700 flex justify-between items-center"
+      >
+        <h2 id="currentChatTitle" class="text-xl font-semibold">Chat</h2>
+      </header>
+      <div
+        id="chatMessages"
+        class="flex-1 p-4 overflow-y-auto space-y-2"
+      >
+        <p class="text-gray-400 text-center mt-10">
+          Select a group to start chatting
+        </p>
       </div>
-    </div>
+      <footer
+        class="p-4 border-t border-gray-700 flex items-center gap-2 bg-gray-800"
+      >
+        <input
+          type="text"
+          id="messageInput"
+          placeholder="Type a message..."
+          class="flex-1 p-2 bg-gray-700 text-white rounded resize-none"
+          disabled
+          rows="1"
+        />
+        <input type="file" id="imageInput" class="hidden" accept="image/*" />
+        <button
+          id="imageBtn"
+          class="bg-blue-600 p-2 rounded"
+          disabled
+          title="Send image"
+          aria-label="Send image"
+        >
+          📷
+        </button>
+        <button
+          id="sendMessage"
+          class="bg-blue-600 p-2 rounded"
+          disabled
+          title="Send message"
+          aria-label="Send message"
+        >
+          Send
+        </button>
+      </footer>
+    </main>
 
-    <script>
-      const firebaseConfig = {
-        apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
-        authDomain: "chatting-fd641.firebaseapp.com",
-        projectId: "chatting-fd641",
-        storageBucket: "chatting-fd641.firebasestorage.app",
-        messagingSenderId: "535384451291",
-        appId: "1:535384451291:web:828f60686d81be018b44fe",
-        measurementId: "G-RKS4CFZPJ4",
-      };
+    <!-- Right Sidebar (Chat Details or Media) -->
+    <aside class="w-1/5 bg-gray-800 p-4 hidden md:block overflow-y-auto">
+      <h2 class="text-lg font-semibold">Chat Details</h2>
+      <div id="mediaGallery" class="mt-4 space-y-2"></div>
+    </aside>
+  </div>
 
-      firebase.initializeApp(firebaseConfig);
-      const auth = firebase.auth();
-      const db = firebase.firestore();
-      const storage = firebase.storage();
+  <script>
+    // Firebase config - keep your existing keys
+    const firebaseConfig = {
+      apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
+      authDomain: "chatting-fd641.firebaseapp.com",
+      projectId: "chatting-fd641",
+      storageBucket: "chatting-fd641.firebasestorage.app",
+      messagingSenderId: "535384451291",
+      appId: "1:535384451291:web:828f60686d81be018b44fe",
+      measurementId: "G-RKS4CFZPJ4",
+    };
 
-      // DOM Elements
-      const loginScreen = document.getElementById("loginScreen");
-      const app = document.getElementById("app");
-      const loginBtn = document.getElementById("login");
-      const signupBtn = document.getElementById("signup");
-      const logoutBtn = document.getElementById("logout");
-      const sendMessageBtn = document.getElementById("sendMessage");
-      const imageBtn = document.getElementById("imageBtn");
-      const imageInput = document.getElementById("imageInput");
-      const chatList = document.getElementById("chatList");
-      const currentChatTitle = document.getElementById("currentChatTitle");
-      const chatMessages = document.getElementById("chatMessages");
-      const messageInput = document.getElementById("messageInput");
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    const storage = firebase.storage();
 
-      let currentGroupId = null;
-      let unsubscribeMessages = null;
+    // DOM elements
+    const loginScreen = document.getElementById("loginScreen");
+    const app = document.getElementById("app");
+    const loginBtn = document.getElementById("login");
+    const signupBtn = document.getElementById("signup");
+    const logoutBtn = document.getElementById("logout");
+    const sendMessageBtn = document.getElementById("sendMessage");
+    const imageBtn = document.getElementById("imageBtn");
+    const imageInput = document.getElementById("imageInput");
+    const chatList = document.getElementById("chatList");
+    const currentChatTitle = document.getElementById("currentChatTitle");
+    const chatMessages = document.getElementById("chatMessages");
+    const messageInput = document.getElementById("messageInput");
 
-      // Auth state change
-      auth.onAuthStateChanged((user) => {
-        if (user) {
-          loginScreen.style.display = "none";
-          app.style.display = "flex";
-          loadGroups();
-          resetChatArea();
-        } else {
-          loginScreen.style.display = "flex";
-          app.style.display = "none";
-        }
-      });
+    let currentGroupId = null;
+    let unsubscribeMessages = null;
 
-      // Login
-      loginBtn.onclick = () => {
-        const email = document.getElementById("email").value;
-        const password = document.getElementById("password").value;
-        auth.signInWithEmailAndPassword(email, password).catch((e) => alert(e));
-      };
-
-      // Signup
-      signupBtn.onclick = () => {
-        const email = document.getElementById("email").value;
-        const password = document.getElementById("password").value;
-        auth.createUserWithEmailAndPassword(email, password).catch((e) => alert(e));
-      };
-
-      // Logout
-      logoutBtn.onclick = () => auth.signOut();
-
-      // Load groups where user is a member and show as circles
-      function loadGroups() {
-        chatList.innerHTML = '<p class="text-gray-400">Loading groups...</p>';
-
-        db.collection("groups")
-          .where("members", "array-contains", auth.currentUser.uid)
-          .onSnapshot((snapshot) => {
-            chatList.innerHTML = "";
-
-            if (snapshot.empty) {
-              chatList.innerHTML =
-                '<p class="text-gray-400">No groups found. Create one!</p>';
-              return;
-            }
-
-            snapshot.forEach((doc) => {
-              const group = doc.data();
-
-              // Use initials as circle text, fallback to first 2 letters uppercase
-              const initials = getInitials(group.name);
-
-              const div = document.createElement("div");
-              div.className = "group-circle";
-              if (doc.id === currentGroupId) div.classList.add("selected");
-              div.textContent = initials;
-              div.title = group.name;
-              div.onclick = () => selectGroup(doc.id, group.name);
-              chatList.appendChild(div);
-            });
-          });
+    // Monitor auth state
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        loginScreen.style.display = "none";
+        app.classList.remove("hidden");
+        loadGroups();
+        resetChatArea();
+      } else {
+        loginScreen.style.display = "flex";
+        app.classList.add("hidden");
       }
+    });
 
-      // Helper: get initials from group name
-      function getInitials(name) {
-        const words = name.trim().split(" ");
-        if (words.length === 1) {
-          return words[0].substring(0, 2).toUpperCase();
-        }
-        return (
-          words[0].charAt(0).toUpperCase() + words[1].charAt(0).toUpperCase()
-        );
-      }
+    // Login handler
+    loginBtn.onclick = () => {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      auth.signInWithEmailAndPassword(email, password).catch((e) => alert(e.message));
+    };
 
-      // Select group to chat
-      function selectGroup(groupId, groupName) {
-        if (currentGroupId === groupId) return;
+    // Signup handler
+    signupBtn.onclick = () => {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      auth.createUserWithEmailAndPassword(email, password).catch((e) => alert(e.message));
+    };
 
-        currentGroupId = groupId;
-        currentChatTitle.textContent = groupName;
-        messageInput.disabled = false;
-        sendMessageBtn.disabled = false;
-        imageBtn.disabled = false;
+    // Logout handler
+    logoutBtn.onclick = () => auth.signOut();
 
-        loadGroupMessages(groupId);
-        loadGroups(); // Refresh highlight
-      }
+    // Load groups where user is member
+    function loadGroups() {
+      chatList.innerHTML = '<p class="text-gray-400 text-center">Loading groups...</p>';
 
-      // Reset chat area on logout or no group selected
-      function resetChatArea() {
-        currentGroupId = null;
-        currentChatTitle.textContent = "Chat";
-        chatMessages.innerHTML =
-          '<p class="text-gray-400 text-center mt-10">Select a group to start chatting</p>';
-        messageInput.value = "";
-        messageInput.disabled = true;
-        sendMessageBtn.disabled = true;
-        imageBtn.disabled = true;
-        if (unsubscribeMessages) unsubscribeMessages();
-      }
+      db.collection("groups")
+        .where("members", "array-contains", auth.currentUser.uid)
+        .onSnapshot((snapshot) => {
+          chatList.innerHTML = "";
 
-      // Load messages for selected group
-      function loadGroupMessages(groupId) {
-        chatMessages.innerHTML =
-          '<p class="text-gray-400 text-center mt-10">Loading messages...</p>';
-        if (unsubscribeMessages) unsubscribeMessages();
-
-        unsubscribeMessages = db
-          .collection("groups")
-          .doc(groupId)
-          .collection("messages")
-          .orderBy("timestamp")
-          .onSnapshot((snapshot) => {
-            chatMessages.innerHTML = "";
-            if (snapshot.empty) {
-              chatMessages.innerHTML =
-                '<p class="text-gray-400 text-center mt-10">No messages yet.</p>';
-              return;
-            }
-
-            snapshot.forEach((doc) => {
-              const msg = doc.data();
-              const el = document.createElement("div");
-              el.className = "p-2 rounded max-w-xs break-words";
-
-              // Simple message style: blue for own messages, gray for others
-              if (msg.senderId === auth.currentUser.uid) {
-                el.classList.add("bg-blue-600", "self-end", "text-white");
-              } else {
-                el.classList.add("bg-gray-700", "self-start", "text-white");
-              }
-
-              if (msg.type === "text") {
-                el.textContent = msg.text;
-              } else if (msg.type === "image") {
-                const img = document.createElement("img");
-                img.src = msg.imageUrl;
-                img.alt = "Sent Image";
-                img.className = "max-w-full rounded";
-                el.appendChild(img);
-              }
-
-              // Show sender email or name if available (optional)
-              if (msg.senderEmail) {
-                const senderSpan = document.createElement("span");
-                senderSpan.textContent = " (" + msg.senderEmail + ")";
-                senderSpan.className = "block text-xs text-gray-300";
-                el.appendChild(senderSpan);
-              }
-
-              chatMessages.appendChild(el);
-              chatMessages.scrollTop = chatMessages.scrollHeight;
-            });
-          });
-      }
-
-      // Send message (text or image)
-      async function sendMessage(type = "text", imageFile = null) {
-        if (!currentGroupId) return;
-
-        const text = messageInput.value.trim();
-        if (type === "text" && !text) return;
-
-        const messageData = {
-          senderId: auth.currentUser.uid,
-          senderEmail: auth.currentUser.email,
-          timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-          type: type,
-        };
-
-        if (type === "text") {
-          messageData.text = text;
-        }
-
-        if (type === "image" && imageFile) {
-          // Upload image to Firebase Storage
-          const storageRef = storage.ref();
-          const imgRef = storageRef.child(
-            `groupImages/${currentGroupId}/${Date.now()}_${imageFile.name}`
-          );
-          try {
-            await imgRef.put(imageFile);
-            const imageUrl = await imgRef.getDownloadURL();
-            messageData.imageUrl = imageUrl;
-          } catch (e) {
-            alert("Image upload failed: " + e.message);
+          if (snapshot.empty) {
+            chatList.innerHTML = '<p class="text-gray-400 text-center">No groups found. Create one!</p>';
             return;
           }
-        }
 
-        // Add message to Firestore
+          snapshot.forEach((doc) => {
+            const group = doc.data();
+
+            const initials = getInitials(group.name);
+
+            const div = document.createElement("div");
+            div.className = "group-circle";
+            div.title = group.name;
+            div.textContent = initials;
+            div.dataset.groupId = doc.id;
+
+            // Highlight selected
+            if (doc.id === currentGroupId) {
+              div.classList.add("selected");
+            }
+
+            div.onclick = () => {
+              if (currentGroupId !== doc.id) {
+                currentGroupId = doc.id;
+                highlightSelectedGroup();
+                loadMessages(currentGroupId, group.name);
+                enableChatInput(true);
+              }
+            };
+
+            chatList.appendChild(div);
+          });
+
+          // Auto-select first group if none selected
+          if (!currentGroupId && snapshot.docs.length > 0) {
+            const firstGroupDoc = snapshot.docs[0];
+            currentGroupId = firstGroupDoc.id;
+            highlightSelectedGroup();
+            loadMessages(currentGroupId, firstGroupDoc.data().name);
+            enableChatInput(true);
+          }
+        });
+    }
+
+    // Utility to get initials from group name
+    function getInitials(name) {
+      if (!name) return "?";
+      const words = name.trim().split(/\s+/);
+      if (words.length === 1) return words[0].substring(0, 2).toUpperCase();
+      return (words[0][0] + words[1][0]).toUpperCase();
+    }
+
+    // Highlight selected group circle visually
+    function highlightSelectedGroup() {
+      const circles = chatList.querySelectorAll(".group-circle");
+      circles.forEach((circle) => {
+        if (circle.dataset.groupId === currentGroupId) {
+          circle.classList.add("selected");
+        } else {
+          circle.classList.remove("selected");
+        }
+      });
+    }
+
+    // Load messages for selected group
+    function loadMessages(groupId, groupName) {
+      currentChatTitle.textContent = groupName || "Chat";
+      chatMessages.innerHTML =
+        '<p class="text-gray-400 text-center mt-10">Loading messages...</p>';
+
+      // Unsubscribe previous listener if any
+      if (unsubscribeMessages) unsubscribeMessages();
+
+      unsubscribeMessages = db
+        .collection("groups")
+        .doc(groupId)
+        .collection("messages")
+        .orderBy("timestamp")
+        .onSnapshot((snapshot) => {
+          chatMessages.innerHTML = "";
+
+          if (snapshot.empty) {
+            chatMessages.innerHTML =
+              '<p class="text-gray-400 text-center mt-10">No messages yet.</p>';
+            return;
+          }
+
+          snapshot.forEach((doc) => {
+            const msg = doc.data();
+            const el = document.createElement("div");
+            el.className = "p-2 rounded max-w-xs break-words flex flex-col";
+
+            // Style messages
+            if (msg.senderId === auth.currentUser.uid) {
+              el.classList.add("bg-blue-600", "self-end", "text-white");
+            } else {
+              el.classList.add("bg-gray-700", "self-start", "text-white");
+            }
+
+            if (msg.type === "text") {
+              const textEl = document.createElement("span");
+              textEl.textContent = msg.text;
+              el.appendChild(textEl);
+            } else if (msg.type === "image") {
+              const img = document.createElement("img");
+              img.src = msg.imageUrl;
+              img.alt = "Sent Image";
+              img.className = "max-w-full rounded";
+              el.appendChild(img);
+            }
+
+            // Sender email below message
+            if (msg.senderEmail) {
+              const senderSpan = document.createElement("span");
+              senderSpan.textContent = " (" + msg.senderEmail + ")";
+              senderSpan.className = "block text-xs text-gray-300 mt-1";
+              el.appendChild(senderSpan);
+            }
+
+            chatMessages.appendChild(el);
+          });
+
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        });
+    }
+
+    // Enable or disable chat input based on group selection
+    function enableChatInput(enabled) {
+      messageInput.disabled = !enabled;
+      sendMessageBtn.disabled = !enabled;
+      imageBtn.disabled = !enabled;
+      if (!enabled) {
+        messageInput.value = "";
+      }
+    }
+
+    // Reset chat area on logout or login
+    function resetChatArea() {
+      currentGroupId = null;
+      chatMessages.innerHTML =
+        '<p class="text-gray-400 text-center mt-10">Select a group to start chatting</p>';
+      currentChatTitle.textContent = "Chat";
+      enableChatInput(false);
+      chatList.innerHTML = "";
+    }
+
+    // Send message function
+    async function sendMessage(type = "text", imageFile = null) {
+      if (!currentGroupId) return;
+
+      const text = messageInput.value.trim();
+      if (type === "text" && !text) return;
+
+      const messageData = {
+        senderId: auth.currentUser.uid,
+        senderEmail: auth.currentUser.email,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        type: type,
+      };
+
+      if (type === "text") {
+        messageData.text = text;
+      }
+
+      if (type === "image" && imageFile) {
+        // Upload image to Firebase Storage
+        const storageRef = storage.ref();
+        const imgRef = storageRef.child(
+          `groupImages/${currentGroupId}/${Date.now()}_${imageFile.name}`
+        );
         try {
-          await db
-            .collection("groups")
-            .doc(currentGroupId)
-            .collection("messages")
-            .add(messageData);
-          messageInput.value = "";
+          await imgRef.put(imageFile);
+          const imageUrl = await imgRef.getDownloadURL();
+          messageData.imageUrl = imageUrl;
         } catch (e) {
-          alert("Failed to send message: " + e.message);
+          alert("Image upload failed: " + e.message);
+          return;
         }
       }
 
-      // Send button
-      sendMessageBtn.onclick = () => sendMessage("text");
+      try {
+        await db
+          .collection("groups")
+          .doc(currentGroupId)
+          .collection("messages")
+          .add(messageData);
+        messageInput.value = "";
+      } catch (e) {
+        alert("Failed to send message: " + e.message);
+      }
+    }
 
-      // Image button click to open file picker
-      imageBtn.onclick = () => imageInput.click();
+    // Button and input events
+    sendMessageBtn.onclick = () => sendMessage("text");
 
-      // Image file selected
-      imageInput.onchange = () => {
-        const file = imageInput.files[0];
-        if (file) sendMessage("image", file);
-        imageInput.value = ""; // reset input
-      };
+    imageBtn.onclick = () => imageInput.click();
 
-      // Press Enter to send text message
-      messageInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          sendMessage("text");
-        }
-      });
-    </script>
-  </body>
+    imageInput.onchange = () => {
+      const file = imageInput.files[0];
+      if (file) sendMessage("image", file);
+      imageInput.value = "";
+    };
+
+    // Press Enter to send message (without Shift+Enter)
+    messageInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage("text");
+      }
+    });
+  </script>
+</body>
 </html>
