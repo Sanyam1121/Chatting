@@ -2,146 +2,178 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Firebase Chat Groups with Reactions & Read Receipts</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Firebase Chat Groups</title>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
-  <style>
-    .reaction-btn {
-      cursor: pointer;
-      user-select: none;
-      padding: 0 6px;
-      font-size: 1.1rem;
-      transition: transform 0.15s ease;
-    }
-    .reaction-btn:hover {
-      transform: scale(1.3);
-    }
-    .reaction-selected {
-      background-color: #2563eb;
-      border-radius: 50%;
-      color: white;
-    }
-    .read-receipt {
-      font-size: 0.75rem;
-      color: #6b7280; /* Tailwind gray-400 */
-      margin-left: 6px;
-    }
-  </style>
 </head>
 <body class="bg-gray-900 text-white">
-  <div id="app" class="flex h-screen">
-    
+  <div id="app" class="flex h-screen" style="display:none">
     <!-- Sidebar for Groups -->
     <aside class="w-1/5 bg-gray-800 p-4 flex flex-col space-y-4">
       <h1 class="text-xl font-bold">Groups</h1>
-      
+
       <!-- Group List -->
       <div id="groupList" class="flex flex-col gap-2 overflow-y-auto flex-1"></div>
-      
+
       <!-- Create Group -->
       <form id="create-group-form" class="flex gap-2">
-        <input id="group-name" type="text" placeholder="New Group" class="flex-1 p-2 bg-gray-700 rounded" required />
+        <input
+          id="group-name"
+          type="text"
+          placeholder="New Group"
+          class="flex-1 p-2 bg-gray-700 rounded"
+          required
+        />
         <button type="submit" class="bg-green-600 px-2 rounded">➕</button>
       </form>
-      
+
       <button id="logout" class="bg-red-600 p-2 rounded">Logout</button>
     </aside>
-    
+
     <!-- Chat Area -->
     <main class="flex-1 flex flex-col">
       <header class="p-4 border-b border-gray-700">
         <h2 id="chatTitle" class="text-xl font-semibold">Select a Group</h2>
       </header>
-      <div id="chatMessages" class="flex-1 p-4 overflow-y-auto space-y-2"></div>
+      <div
+        id="chatMessages"
+        class="flex-1 p-4 overflow-y-auto space-y-2"
+        style="background-color:#1F2937"
+      ></div>
       <footer class="p-4 border-t border-gray-700 flex items-center gap-2">
-        <input id="messageInput" type="text" placeholder="Type a message..." class="flex-1 p-2 bg-gray-800 rounded" />
+        <input
+          id="messageInput"
+          type="text"
+          placeholder="Type a message..."
+          class="flex-1 p-2 bg-gray-800 rounded"
+        />
         <button id="sendMessage" class="bg-blue-600 p-2 rounded">Send</button>
       </footer>
     </main>
   </div>
 
   <!-- Login Screen -->
-  <div id="loginScreen" class="fixed inset-0 flex justify-center items-center bg-gray-900 z-50">
+  <div
+    id="loginScreen"
+    class="fixed inset-0 flex justify-center items-center bg-gray-900 z-50"
+  >
     <div class="bg-gray-800 p-6 rounded w-80">
-      <h2 class="text-xl mb-4">Login</h2>
-      <input id="email" type="email" placeholder="Email" class="w-full p-2 mb-2 bg-gray-700 rounded" />
-      <input id="password" type="password" placeholder="Password" class="w-full p-2 mb-2 bg-gray-700 rounded" />
-      <button id="login" class="w-full bg-blue-600 p-2 rounded">Login</button>
-      <button id="signup" class="w-full mt-2 bg-green-600 p-2 rounded">Sign Up</button>
+      <h2 class="text-xl mb-4">Login / Sign Up</h2>
+      <input
+        id="email"
+        type="email"
+        placeholder="Email"
+        class="w-full p-2 mb-2 bg-gray-700 rounded"
+      />
+      <input
+        id="password"
+        type="password"
+        placeholder="Password"
+        class="w-full p-2 mb-2 bg-gray-700 rounded"
+      />
+      <button id="login" class="w-full bg-blue-600 p-2 rounded mb-2">
+        Login
+      </button>
+      <button id="signup" class="w-full bg-green-600 p-2 rounded">Sign Up</button>
+      <p id="authError" class="text-red-500 mt-2"></p>
     </div>
   </div>
 
   <script>
-    // 🔧 Firebase Config
+    // Firebase Config
     const firebaseConfig = {
       apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
       authDomain: "chatting-fd641.firebaseapp.com",
       projectId: "chatting-fd641",
       storageBucket: "chatting-fd641.appspot.com",
       messagingSenderId: "535384451291",
-      appId: "1:535384451291:web:828f60686d81be018b44fe"
+      appId: "1:535384451291:web:828f60686d81be018b44fe",
     };
 
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.firestore();
 
-    // DOM refs
-    const loginScreen = document.getElementById('loginScreen');
-    const app = document.getElementById('app');
-    const loginBtn = document.getElementById('login');
-    const signupBtn = document.getElementById('signup');
-    const logoutBtn = document.getElementById('logout');
-    const groupList = document.getElementById('groupList');
-    const createGroupForm = document.getElementById('create-group-form');
-    const groupNameInput = document.getElementById('group-name');
-    const chatMessages = document.getElementById('chatMessages');
-    const messageInput = document.getElementById('messageInput');
-    const sendMessageBtn = document.getElementById('sendMessage');
-    const chatTitle = document.getElementById('chatTitle');
+    // DOM references
+    const loginScreen = document.getElementById("loginScreen");
+    const app = document.getElementById("app");
+    const loginBtn = document.getElementById("login");
+    const signupBtn = document.getElementById("signup");
+    const logoutBtn = document.getElementById("logout");
+    const groupList = document.getElementById("groupList");
+    const createGroupForm = document.getElementById("create-group-form");
+    const groupNameInput = document.getElementById("group-name");
+    const chatMessages = document.getElementById("chatMessages");
+    const messageInput = document.getElementById("messageInput");
+    const sendMessageBtn = document.getElementById("sendMessage");
+    const chatTitle = document.getElementById("chatTitle");
+    const authError = document.getElementById("authError");
 
     let currentGroupId = null;
-    let unsubscribeMessages = null;
 
-    // List of reactions to show for each message
-    const availableReactions = ['👍', '❤️', '😂', '😮', '😢', '👏'];
+    // Clear auth error text helper
+    function clearAuthError() {
+      authError.textContent = "";
+    }
+
+    // Show auth error helper
+    function showAuthError(error) {
+      authError.textContent = error.message || error;
+    }
 
     // Auth listener
-    auth.onAuthStateChanged(user => {
+    auth.onAuthStateChanged((user) => {
       if (user) {
-        loginScreen.style.display = 'none';
-        app.style.display = 'flex';
+        loginScreen.style.display = "none";
+        app.style.display = "flex";
+        clearAuthError();
         loadGroups();
       } else {
-        loginScreen.style.display = 'flex';
-        app.style.display = 'none';
-        if (unsubscribeMessages) {
-          unsubscribeMessages();
-          unsubscribeMessages = null;
-        }
-        currentGroupId = null;
-        chatTitle.textContent = 'Select a Group';
-        chatMessages.innerHTML = '';
-        groupList.innerHTML = '';
+        loginScreen.style.display = "flex";
+        app.style.display = "none";
       }
     });
 
-    // Auth actions
-    loginBtn.onclick = () => {
-      const email = document.getElementById('email').value;
-      const password = document.getElementById('password').value;
-      auth.signInWithEmailAndPassword(email, password).catch(e => alert(e.message));
+    // Login
+    loginBtn.onclick = async () => {
+      clearAuthError();
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value.trim();
+
+      if (!email || !password) {
+        showAuthError("Please enter email and password.");
+        return;
+      }
+
+      try {
+        await auth.signInWithEmailAndPassword(email, password);
+      } catch (error) {
+        showAuthError(error);
+      }
     };
 
-    signupBtn.onclick = () => {
-      const email = document.getElementById('email').value;
-      const password = document.getElementById('password').value;
-      auth.createUserWithEmailAndPassword(email, password).catch(e => alert(e.message));
+    // Signup
+    signupBtn.onclick = async () => {
+      clearAuthError();
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value.trim();
+
+      if (!email || !password) {
+        showAuthError("Please enter email and password.");
+        return;
+      }
+
+      try {
+        await auth.createUserWithEmailAndPassword(email, password);
+      } catch (error) {
+        showAuthError(error);
+      }
     };
 
+    // Logout
     logoutBtn.onclick = () => auth.signOut();
 
     // Create group
@@ -150,135 +182,98 @@
       const name = groupNameInput.value.trim();
       if (!name) return;
 
-      await db.collection('groups').add({
-        name,
-        members: [auth.currentUser.uid],
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-
-      groupNameInput.value = '';
+      try {
+        await db.collection("groups").add({
+          name,
+          members: [auth.currentUser.uid],
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+        groupNameInput.value = "";
+      } catch (error) {
+        alert("Error creating group: " + error.message);
+      }
     };
 
     // Load groups
     function loadGroups() {
-      db.collection('groups').orderBy('createdAt')
-        .onSnapshot(snapshot => {
-          groupList.innerHTML = '';
-          snapshot.forEach(doc => {
+      db.collection("groups")
+        .orderBy("createdAt")
+        .onSnapshot((snapshot) => {
+          groupList.innerHTML = "";
+          snapshot.forEach((doc) => {
             const group = doc.data();
-            const div = document.createElement('div');
+
+            const div = document.createElement("div");
             div.textContent = group.name;
-            div.className = 'cursor-pointer bg-gray-700 rounded-full px-3 py-2 text-center hover:bg-gray-600';
-            div.onclick = () => selectGroup(doc.id, group.name);
+            div.className =
+              "cursor-pointer bg-gray-700 rounded-full px-3 py-2 text-center hover:bg-gray-600 flex justify-between items-center";
+
+            // Group name clickable area
+            const groupNameSpan = document.createElement("span");
+            groupNameSpan.textContent = group.name;
+            groupNameSpan.className = "flex-1";
+            groupNameSpan.style.userSelect = "none";
+            groupNameSpan.onclick = () => selectGroup(doc.id, group.name);
+
+            // Delete button
+            const deleteBtn = document.createElement("button");
+            deleteBtn.textContent = "🗑️";
+            deleteBtn.title = "Delete Group";
+            deleteBtn.className =
+              "ml-2 bg-red-600 px-2 rounded hover:bg-red-700";
+            deleteBtn.onclick = async (e) => {
+              e.stopPropagation(); // prevent triggering selectGroup
+              if (
+                confirm(
+                  `Are you sure you want to delete the group "${group.name}"?`
+                )
+              ) {
+                await deleteGroup(doc.id);
+              }
+            };
+
+            div.innerHTML = "";
+            div.appendChild(groupNameSpan);
+            div.appendChild(deleteBtn);
+
             groupList.appendChild(div);
           });
         });
     }
 
-    // Select group and listen for messages
+    // Select group
     function selectGroup(id, name) {
       currentGroupId = id;
       chatTitle.textContent = name;
-      chatMessages.innerHTML = '';
+      chatMessages.innerHTML = "";
 
-      // Unsubscribe previous messages listener if any
-      if (unsubscribeMessages) unsubscribeMessages();
+      // Unsubscribe previous listener if any
+      if (window.unsubscribeMessages) window.unsubscribeMessages();
 
-      unsubscribeMessages = db.collection('groups').doc(id).collection('messages')
-        .orderBy('createdAt')
-        .onSnapshot(snapshot => {
-          chatMessages.innerHTML = '';
-          const batchUpdateReads = [];
-          snapshot.forEach(doc => {
+      window.unsubscribeMessages = db
+        .collection("groups")
+        .doc(id)
+        .collection("messages")
+        .orderBy("createdAt")
+        .onSnapshot((snapshot) => {
+          chatMessages.innerHTML = "";
+          snapshot.forEach((doc) => {
             const data = doc.data();
-            const messageId = doc.id;
+            const div = document.createElement("div");
+            div.className = "bg-gray-800 p-2 rounded";
 
-            // Message container
-            const div = document.createElement('div');
-            div.className = 'bg-gray-800 p-2 rounded flex flex-col';
+            // Show user and message text
+            const userSpan = document.createElement("span");
+            userSpan.className = "font-semibold mr-2 text-green-400";
+            userSpan.textContent = data.uid === auth.currentUser.uid ? "You:" : "User:";
+            div.appendChild(userSpan);
 
-            // Message text + reactions container
-            const topRow = document.createElement('div');
-            topRow.className = 'flex items-center justify-between';
-
-            // Message text
-            const msgText = document.createElement('span');
-            msgText.textContent = data.text;
-            topRow.appendChild(msgText);
-
-            // Read receipt (if current user has read this message)
-            const isReadByUser = data.readBy && data.readBy.includes(auth.currentUser.uid);
-            const readReceipt = document.createElement('span');
-            readReceipt.className = 'read-receipt';
-            readReceipt.textContent = isReadByUser ? '✓ Read' : '';
-            topRow.appendChild(readReceipt);
-
-            div.appendChild(topRow);
-
-            // Reactions container
-            const reactionsDiv = document.createElement('div');
-            reactionsDiv.className = 'flex gap-1 mt-1';
-
-            // For each available reaction, create a button
-            availableReactions.forEach(react => {
-              const btn = document.createElement('button');
-              btn.textContent = react;
-              btn.className = 'reaction-btn';
-              // Check if this user reacted with this emoji
-              const reactions = data.reactions || {};
-              const usersReacted = reactions[react] || [];
-              if (usersReacted.includes(auth.currentUser.uid)) {
-                btn.classList.add('reaction-selected');
-              }
-
-              btn.onclick = async () => {
-                const messageRef = db.collection('groups').doc(id).collection('messages').doc(messageId);
-                const messageDoc = await messageRef.get();
-                if (!messageDoc.exists) return;
-
-                const currentData = messageDoc.data();
-                let reactions = currentData.reactions || {};
-
-                // If user already reacted with this emoji, remove reaction
-                if (reactions[react] && reactions[react].includes(auth.currentUser.uid)) {
-                  reactions[react] = reactions[react].filter(uid => uid !== auth.currentUser.uid);
-                  if (reactions[react].length === 0) delete reactions[react];
-                } else {
-                  // Add reaction
-                  if (!reactions[react]) reactions[react] = [];
-                  reactions[react].push(auth.currentUser.uid);
-                }
-
-                await messageRef.update({ reactions });
-              };
-
-              // Show count if >0
-              const countSpan = document.createElement('span');
-              countSpan.className = 'ml-1 text-sm';
-              const reactions = data.reactions || {};
-              const count = reactions[react] ? reactions[react].length : 0;
-              countSpan.textContent = count > 0 ? count : '';
-              btn.appendChild(countSpan);
-
-              reactionsDiv.appendChild(btn);
-            });
-
-            div.appendChild(reactionsDiv);
+            const messageSpan = document.createElement("span");
+            messageSpan.textContent = data.text;
+            div.appendChild(messageSpan);
 
             chatMessages.appendChild(div);
-
-            // Mark this message as read by current user if not already
-            if (!isReadByUser) {
-              const messageRef = db.collection('groups').doc(id).collection('messages').doc(messageId);
-              batchUpdateReads.push(messageRef.update({
-                readBy: firebase.firestore.FieldValue.arrayUnion(auth.currentUser.uid)
-              }));
-            }
           });
-
-          // Update all readBy in parallel
-          Promise.all(batchUpdateReads).catch(console.error);
-
           chatMessages.scrollTop = chatMessages.scrollHeight;
         });
     }
@@ -287,16 +282,44 @@
     sendMessageBtn.onclick = async () => {
       const text = messageInput.value.trim();
       if (!text || !currentGroupId) return;
-      await db.collection('groups').doc(currentGroupId).collection('messages').add({
-        uid: auth.currentUser.uid,
-        text,
-        reactions: {},
-        readBy: [auth.currentUser.uid], // Mark sent message as read by sender immediately
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      messageInput.value = '';
+      try {
+        await db.collection("groups").doc(currentGroupId).collection("messages").add({
+          uid: auth.currentUser.uid,
+          text,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+        messageInput.value = "";
+      } catch (error) {
+        alert("Error sending message: " + error.message);
+      }
     };
 
+    // Delete group (and its messages)
+    async function deleteGroup(groupId) {
+      try {
+        // Delete all messages subcollection documents first
+        const messagesSnapshot = await db
+          .collection("groups")
+          .doc(groupId)
+          .collection("messages")
+          .get();
+
+        const batch = db.batch();
+        messagesSnapshot.forEach((doc) => batch.delete(doc.ref));
+        await batch.commit();
+
+        // Delete the group document itself
+        await db.collection("groups").doc(groupId).delete();
+
+        if (currentGroupId === groupId) {
+          currentGroupId = null;
+          chatTitle.textContent = "Select a Group";
+          chatMessages.innerHTML = "";
+        }
+      } catch (error) {
+        alert("Error deleting group: " + error.message);
+      }
+    }
   </script>
 </body>
 </html>
