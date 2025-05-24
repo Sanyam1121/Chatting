@@ -7,6 +7,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body class="bg-gray-900 text-white">
@@ -16,6 +17,8 @@
       <div class="w-1/4 bg-gray-800 p-4 overflow-y-auto">
         <h2 class="text-2xl font-bold mb-4">Chats</h2>
         <div id="chat-list" class="space-y-2"></div>
+        <button onclick="createGroup()" class="mt-2 w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded">Create Group</button>
+        <button onclick="deleteGroup()" class="mt-2 w-full bg-yellow-600 hover:bg-yellow-700 text-white py-2 rounded">Delete Group</button>
         <button onclick="logout()" class="mt-4 w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded">Logout</button>
       </div>
 
@@ -31,18 +34,10 @@
         <div id="messages" class="flex-1 overflow-y-auto p-4 space-y-2"></div>
 
         <div class="flex items-center p-4 border-t border-gray-700">
-          <input
-            type="text"
-            id="messageInput"
-            placeholder="Type a message"
-            class="flex-1 bg-gray-700 text-white p-2 rounded-l-md focus:outline-none"
-          />
-          <button
-            onclick="sendMessage()"
-            class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-r-md"
-          >
-            Send
-          </button>
+          <input type="file" id="fileInput" class="hidden" onchange="uploadFile(event)" />
+          <button onclick="document.getElementById('fileInput').click()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-l-md">Upload</button>
+          <input type="text" id="messageInput" placeholder="Type a message" class="flex-1 bg-gray-700 text-white p-2" />
+          <button onclick="sendMessage()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-r-md">Send</button>
         </div>
       </div>
 
@@ -77,6 +72,7 @@
       firebase.initializeApp(firebaseConfig);
       const auth = firebase.auth();
       const db = firebase.firestore();
+      const storage = firebase.storage();
 
       let currentUser = null;
       let currentChatId = null;
@@ -112,6 +108,22 @@
         });
       }
 
+      function createGroup() {
+        const name = prompt("Enter group name:");
+        if (name) {
+          db.collection("chats").add({ name, participants: [currentUser.email] });
+        }
+      }
+
+      function deleteGroup() {
+        if (currentChatId && confirm("Are you sure you want to delete this group?")) {
+          db.collection("chats").doc(currentChatId).delete();
+          currentChatId = null;
+          document.getElementById("chat-title").textContent = "Select a chat";
+          document.getElementById("messages").innerHTML = "";
+        }
+      }
+
       function openChat(chatId, chatName) {
         currentChatId = chatId;
         document.getElementById("chat-title").textContent = chatName;
@@ -126,7 +138,7 @@
               const msg = doc.data();
               const msgDiv = document.createElement("div");
               msgDiv.className = `p-2 rounded max-w-xs ${msg.sender === currentUser.email ? 'bg-blue-600 ml-auto text-right' : 'bg-gray-700 mr-auto'}`;
-              msgDiv.innerHTML = `<div class='text-sm'>${msg.sender}</div><div>${msg.text}</div>`;
+              msgDiv.innerHTML = `<div class='text-sm'>${msg.sender}</div><div>${msg.text || ''}</div>${msg.fileURL ? `<a href="${msg.fileURL}" target="_blank" class="text-blue-300 underline">File</a>` : ''}`;
               messagesDiv.appendChild(msgDiv);
               messagesDiv.scrollTop = messagesDiv.scrollHeight;
             });
@@ -142,6 +154,20 @@
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
           });
           document.getElementById("messageInput").value = "";
+        }
+      }
+
+      function uploadFile(event) {
+        const file = event.target.files[0];
+        if (file && currentChatId) {
+          const storageRef = storage.ref(`uploads/${Date.now()}_${file.name}`);
+          storageRef.put(file).then(snapshot => snapshot.ref.getDownloadURL()).then(url => {
+            db.collection("chats").doc(currentChatId).collection("messages").add({
+              fileURL: url,
+              sender: currentUser.email,
+              timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          });
         }
       }
 
