@@ -2,368 +2,628 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Firebase Chat Groups & Direct Messaging</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Firebase Chat Groups</title>
+
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-storage-compat.js"></script>
+
+  <!-- Tailwind CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+
+  <style>
+    /* Scrollbar for chat and group list */
+    #chatMessages::-webkit-scrollbar,
+    #groupList::-webkit-scrollbar {
+      width: 6px;
+    }
+    #chatMessages::-webkit-scrollbar-thumb,
+    #groupList::-webkit-scrollbar-thumb {
+      background-color: #4b5563;
+      border-radius: 3px;
+    }
+  </style>
 </head>
-<body class="bg-gray-900 text-white">
-  <div id="app" class="flex h-screen">
-    
-    <!-- Sidebar for Groups & Direct Messages -->
-    <aside class="w-1/5 bg-gray-800 p-4 flex flex-col space-y-4 overflow-y-auto">
-      <h1 class="text-xl font-bold">Direct Messages</h1>
+<body class="bg-gray-900 text-white flex h-screen">
 
-      <!-- Direct Messages List -->
-      <div id="dmList" class="flex flex-col gap-2 max-h-40 overflow-y-auto"></div>
+  <!-- Sidebar -->
+  <aside class="w-1/5 bg-gray-800 p-4 flex flex-col space-y-4">
+    <div class="flex items-center space-x-3 mb-4">
+      <img id="userAvatarSidebar" src="https://ui-avatars.com/api/?name=User" alt="User Avatar" class="w-10 h-10 rounded-full" />
+      <div id="userNameSidebar" class="font-semibold"></div>
+    </div>
 
-      <!-- New DM Form -->
-      <form id="create-dm-form" class="flex gap-2 mb-6">
-        <input id="dm-email" type="email" placeholder="User Email for DM" class="flex-1 p-2 bg-gray-700 rounded" required />
-        <button type="submit" class="bg-green-600 px-2 rounded">➕</button>
-      </form>
+    <h1 class="text-xl font-bold">Groups</h1>
+    <div id="groupList" class="flex flex-col gap-2 overflow-y-auto flex-1"></div>
 
-      <h1 class="text-xl font-bold">Groups</h1>
-      
-      <!-- Group List -->
-      <div id="groupList" class="flex flex-col gap-2 overflow-y-auto flex-1"></div>
-      
-      <!-- Create Group -->
-      <form id="create-group-form" class="flex gap-2">
-        <input id="group-name" type="text" placeholder="New Group" class="flex-1 p-2 bg-gray-700 rounded" required />
-        <button type="submit" class="bg-green-600 px-2 rounded">➕</button>
-      </form>
-      
-      <button id="logout" class="bg-red-600 p-2 rounded">Logout</button>
-    </aside>
-    
-    <!-- Chat Area -->
-    <main class="flex-1 flex flex-col">
-      <header class="p-4 border-b border-gray-700 flex justify-between items-center">
-        <h2 id="chatTitle" class="text-xl font-semibold">Select a Group or Direct Message</h2>
-        <button id="backToGroups" class="hidden bg-gray-600 px-3 py-1 rounded">Back to Groups</button>
-      </header>
-      <div id="chatMessages" class="flex-1 p-4 overflow-y-auto space-y-2"></div>
-      <footer class="p-4 border-t border-gray-700 flex items-center gap-2">
-        <input id="messageInput" type="text" placeholder="Type a message..." class="flex-1 p-2 bg-gray-800 rounded" />
-        <button id="sendMessage" class="bg-blue-600 p-2 rounded">Send</button>
-      </footer>
-    </main>
-  </div>
+    <button id="newGroupBtn" class="bg-green-600 p-2 rounded hover:bg-green-700">+ New Group</button>
+    <button id="deleteGroupBtn" class="bg-red-600 p-2 rounded hover:bg-red-700 hidden">Delete Group</button>
+    <button id="logoutBtn" class="bg-red-700 p-2 rounded hover:bg-red-800 mt-auto">Logout</button>
+
+    <div class="mt-4">
+      <label for="themeSelect" class="block mb-1">Theme</label>
+      <select id="themeSelect" class="w-full bg-gray-700 rounded p-1 text-white">
+        <option value="dark">Dark</option>
+        <option value="light">Light</option>
+      </select>
+    </div>
+  </aside>
+
+  <!-- Main Chat Area -->
+  <main class="flex-1 flex flex-col">
+    <header class="p-4 border-b border-gray-700 flex justify-between items-center">
+      <h2 id="chatTitle" class="text-xl font-semibold">Select a Group</h2>
+      <div id="typingIndicator" class="text-sm italic text-gray-400"></div>
+    </header>
+
+    <div id="chatMessages" class="flex-1 p-4 overflow-y-auto space-y-3"></div>
+
+    <footer class="p-4 border-t border-gray-700 flex items-center gap-2">
+      <input id="messageInput" type="text" placeholder="Type a message..." class="flex-1 p-2 bg-gray-800 rounded" />
+      <input id="imageInput" type="file" accept="image/*" class="hidden" />
+      <button id="imageUploadBtn" title="Upload Image" class="p-2 hover:bg-gray-700 rounded">
+        📷
+      </button>
+      <button id="recordAudioBtn" title="Record Voice Message" class="p-2 hover:bg-gray-700 rounded">
+        🎤
+      </button>
+      <button id="sendMessageBtn" class="bg-blue-600 p-2 rounded hover:bg-blue-700">Send</button>
+    </footer>
+  </main>
 
   <!-- Login Screen -->
-  <div id="loginScreen" class="fixed inset-0 flex justify-center items-center bg-gray-900 z-50">
-    <div class="bg-gray-800 p-6 rounded w-80">
-      <h2 class="text-xl mb-4">Login</h2>
-      <input id="email" type="email" placeholder="Email" class="w-full p-2 mb-2 bg-gray-700 rounded" />
-      <input id="password" type="password" placeholder="Password" class="w-full p-2 mb-2 bg-gray-700 rounded" />
-      <button id="login" class="w-full bg-blue-600 p-2 rounded">Login</button>
-      <button id="signup" class="w-full mt-2 bg-green-600 p-2 rounded">Sign Up</button>
+  <div id="authSection" class="fixed inset-0 bg-gray-900 flex flex-col justify-center items-center p-6 z-50">
+    <div class="bg-gray-800 p-6 rounded w-full max-w-md">
+      <h2 class="text-xl mb-4 text-center">Login / Sign Up</h2>
+      <input id="emailInput" type="email" placeholder="Email" class="w-full p-2 mb-3 bg-gray-700 rounded text-white" />
+      <input id="passwordInput" type="password" placeholder="Password" class="w-full p-2 mb-3 bg-gray-700 rounded text-white" />
+      <div class="flex gap-2">
+        <button id="loginBtn" class="flex-1 bg-blue-600 p-2 rounded hover:bg-blue-700">Login</button>
+        <button id="signupBtn" class="flex-1 bg-green-600 p-2 rounded hover:bg-green-700">Sign Up</button>
+      </div>
     </div>
   </div>
 
-  <script>
-    // 🔧 Firebase Config
-    const firebaseConfig = {
-      apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
-      authDomain: "chatting-fd641.firebaseapp.com",
-      projectId: "chatting-fd641",
-      storageBucket: "chatting-fd641.appspot.com",
-      messagingSenderId: "535384451291",
-      appId: "1:535384451291:web:828f60686d81be018b44fe"
-    };
+<script>
+  // Firebase config & initialization
+  const firebaseConfig = {
+    apiKey: "AIzaSyDuGHDotdc-EZRxyyJLrWXyLsi2dLhSHm4",
+    authDomain: "chatting-fd641.firebaseapp.com",
+    projectId: "chatting-fd641",
+    storageBucket: "chatting-fd641.appspot.com",
+    messagingSenderId: "535384451291",
+    appId: "1:535384451291:web:828f60686d81be018b44fe"
+  };
 
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+  const storage = firebase.storage();
 
-    // DOM refs
-    const loginScreen = document.getElementById('loginScreen');
-    const app = document.getElementById('app');
-    const loginBtn = document.getElementById('login');
-    const signupBtn = document.getElementById('signup');
-    const logoutBtn = document.getElementById('logout');
-    const groupList = document.getElementById('groupList');
-    const createGroupForm = document.getElementById('create-group-form');
-    const groupNameInput = document.getElementById('group-name');
-    const chatMessages = document.getElementById('chatMessages');
-    const messageInput = document.getElementById('messageInput');
-    const sendMessageBtn = document.getElementById('sendMessage');
-    const chatTitle = document.getElementById('chatTitle');
+  // DOM Elements
+  const authSection = document.getElementById('authSection');
+  const emailInput = document.getElementById('emailInput');
+  const passwordInput = document.getElementById('passwordInput');
+  const loginBtn = document.getElementById('loginBtn');
+  const signupBtn = document.getElementById('signupBtn');
 
-    const dmList = document.getElementById('dmList');
-    const createDmForm = document.getElementById('create-dm-form');
-    const dmEmailInput = document.getElementById('dm-email');
-    const backToGroupsBtn = document.getElementById('backToGroups');
+  const userAvatarSidebar = document.getElementById('userAvatarSidebar');
+  const userNameSidebar = document.getElementById('userNameSidebar');
+  const logoutBtn = document.getElementById('logoutBtn');
 
-    let currentGroupId = null;
-    let currentDmId = null;
-    let currentUser = null;
+  const groupList = document.getElementById('groupList');
+  const newGroupBtn = document.getElementById('newGroupBtn');
+  const deleteGroupBtn = document.getElementById('deleteGroupBtn');
 
-    // Auth listener
-    auth.onAuthStateChanged(async (user) => {
-      if (user) {
-        currentUser = user;
-        loginScreen.style.display = 'none';
-        app.style.display = 'flex';
-        loadGroups();
-        loadDirectMessages();
-        showGroupsSidebar();
-        resetChatArea();
-      } else {
-        loginScreen.style.display = 'flex';
-        app.style.display = 'none';
-        currentUser = null;
-      }
-    });
+  const chatTitle = document.getElementById('chatTitle');
+  const chatMessages = document.getElementById('chatMessages');
+  const messageInput = document.getElementById('messageInput');
+  const sendMessageBtn = document.getElementById('sendMessageBtn');
+  const imageInput = document.getElementById('imageInput');
+  const imageUploadBtn = document.getElementById('imageUploadBtn');
+  const recordAudioBtn = document.getElementById('recordAudioBtn');
+  const typingIndicator = document.getElementById('typingIndicator');
+  const themeSelect = document.getElementById('themeSelect');
 
-    // Auth actions
-    loginBtn.onclick = () => {
-      const email = document.getElementById('email').value;
-      const password = document.getElementById('password').value;
-      auth.signInWithEmailAndPassword(email, password).catch(e => alert(e.message));
-    };
+  let currentUser = null;
+  let currentGroupId = null;
+  let mediaRecorder = null;
+  let audioChunks = [];
 
-    signupBtn.onclick = () => {
-      const email = document.getElementById('email').value;
-      const password = document.getElementById('password').value;
-      auth.createUserWithEmailAndPassword(email, password).catch(e => alert(e.message));
-    };
+  // Auth handlers
+  loginBtn.onclick = () => {
+    auth.signInWithEmailAndPassword(emailInput.value, passwordInput.value)
+      .catch(e => alert(e.message));
+  };
 
-    logoutBtn.onclick = () => auth.signOut();
+  signupBtn.onclick = () => {
+    auth.createUserWithEmailAndPassword(emailInput.value, passwordInput.value)
+      .then(cred => {
+        // Create user profile in Firestore if needed
+        db.collection('users').doc(cred.user.uid).set({
+          displayName: emailInput.value.split('@')[0],
+          avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(emailInput.value.split('@')[0])}`
+        }, { merge: true });
+      })
+      .catch(e => alert(e.message));
+  };
 
-    // Create group
-    createGroupForm.onsubmit = async (e) => {
-      e.preventDefault();
-      const name = groupNameInput.value.trim();
-      if (!name) return;
+  logoutBtn.onclick = () => {
+    auth.signOut();
+  };
 
-      await db.collection('groups').add({
-        name,
-        members: [currentUser.uid],
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  // Listen auth state
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      currentUser = user;
+      authSection.style.display = 'none';
+      loadUserProfile(user.uid).then(() => {
+        setupGroupListener();
       });
-
-      groupNameInput.value = '';
-    };
-
-    // Load groups
-    function loadGroups() {
-      db.collection('groups').orderBy('createdAt')
-        .onSnapshot(snapshot => {
-          groupList.innerHTML = '';
-          snapshot.forEach(doc => {
-            const group = doc.data();
-            const div = document.createElement('div');
-            div.textContent = group.name;
-            div.className = 'cursor-pointer bg-gray-700 rounded-full px-3 py-2 text-center hover:bg-gray-600';
-            div.onclick = () => {
-              currentDmId = null;
-              selectGroup(doc.id, group.name);
-              showGroupsSidebar();
-            };
-            groupList.appendChild(div);
-          });
-        });
-    }
-
-    // Select group
-    let groupUnsubscribe = null;
-    function selectGroup(id, name) {
-      currentGroupId = id;
-      chatTitle.textContent = name;
-      messageInput.disabled = false;
-      sendMessageBtn.disabled = false;
-      backToGroupsBtn.classList.add('hidden');
-
-      if (groupUnsubscribe) groupUnsubscribe(); // unsubscribe from previous listener
-
-      groupUnsubscribe = db.collection('groups').doc(id).collection('messages').orderBy('createdAt')
-        .onSnapshot(snapshot => {
-          chatMessages.innerHTML = '';
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            const div = document.createElement('div');
-            div.className = 'bg-gray-800 p-2 rounded';
-            div.textContent = ${data.text};
-            if(data.uid === currentUser.uid) div.classList.add('text-blue-400');
-            chatMessages.appendChild(div);
-          });
-          chatMessages.scrollTop = chatMessages.scrollHeight;
-        });
-    }
-
-    // Reset chat area when no group or DM is selected
-    function resetChatArea() {
+    } else {
+      currentUser = null;
       currentGroupId = null;
-      currentDmId = null;
       chatMessages.innerHTML = '';
-      chatTitle.textContent = 'Select a Group or Direct Message';
-      messageInput.value = '';
-      messageInput.disabled = true;
-      sendMessageBtn.disabled = true;
-      backToGroupsBtn.classList.add('hidden');
+      chatTitle.textContent = 'Select a Group';
+      authSection.style.display = 'flex';
+      groupList.innerHTML = '';
+      userAvatarSidebar.src = `https://ui-avatars.com/api/?name=User`;
+      userNameSidebar.textContent = '';
+      deleteGroupBtn.classList.add('hidden');
+      typingIndicator.textContent = '';
     }
+  });
 
-    // Send message for group or DM
-    sendMessageBtn.onclick = async () => {
-      const text = messageInput.value.trim();
-      if (!text) return;
-
-      if (currentGroupId) {
-        await db.collection('groups').doc(currentGroupId).collection('messages').add({
-          uid: currentUser.uid,
-          text,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      } else if (currentDmId) {
-        await db.collection('private_chats').doc(currentDmId).collection('messages').add({
-          uid: currentUser.uid,
-          text,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      }
-      messageInput.value = '';
-    };
-
-    // ----------- Direct Messaging Section -----------
-
-    // Load direct messages for current user
-    function loadDirectMessages() {
-      db.collection('private_chats')
-        .where('participants', 'array-contains', currentUser.uid)
-        .orderBy('lastUpdated', 'desc')
-        .onSnapshot(snapshot => {
-          dmList.innerHTML = '';
-          snapshot.forEach(doc => {
-            const chat = doc.data();
-            const otherUserId = chat.participants.find(uid => uid !== currentUser.uid);
-            // Get other user's email from users collection (or fallback)
-            getUserEmail(otherUserId).then(email => {
-              const div = document.createElement('div');
-              div.textContent = email || 'Unknown User';
-              div.className = 'cursor-pointer bg-gray-700 rounded-full px-3 py-2 text-center hover:bg-gray-600';
-              div.onclick = () => {
-                currentGroupId = null;
-                selectDirectMessage(doc.id, email);
-                showDirectMessagesSidebar();
-              };
-              dmList.appendChild(div);
-            });
-          });
-        });
+  async function loadUserProfile(uid) {
+    const doc = await db.collection('users').doc(uid).get();
+    if (doc.exists) {
+      const data = doc.data();
+      userNameSidebar.textContent = data.displayName || currentUser.email;
+      userAvatarSidebar.src = data.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(userNameSidebar.textContent)}`;
+    } else {
+      userNameSidebar.textContent = currentUser.email;
+      userAvatarSidebar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.email.split('@')[0])}`;
     }
+  }
 
-    // Helper to get user email by uid
-    async function getUserEmail(uid) {
-      try {
-        const userDoc = await db.collection('users').doc(uid).get();
-        if (userDoc.exists) return userDoc.data().email;
-        else return null;
-      } catch {
-        return null;
-      }
-    }
+  // Group Listeners
+  function setupGroupListener() {
+    db.collection('groups')
+      .where('members', 'array-contains', currentUser.uid)
+      .orderBy('createdAt', 'desc')
+      .onSnapshot(snapshot => {
+        groupList.innerHTML = '';
+        snapshot.forEach(doc => {
+          const group = doc.data();
+          const groupItem = document.createElement('div');
+          groupItem.className = 'p-2 rounded cursor-pointer hover:bg-gray-700 flex justify-between items-center';
+          groupItem.textContent = group.name;
+          groupItem.dataset.id = doc.id;
 
-    // Select a direct message chat
-    let dmUnsubscribe = null;
-    function selectDirectMessage(dmId, otherUserEmail) {
-      currentDmId = dmId;
-      chatTitle.textContent = DM with ${otherUserEmail};
-      messageInput.disabled = false;
-      sendMessageBtn.disabled = false;
-      backToGroupsBtn.classList.remove('hidden');
+          if (doc.id === currentGroupId) {
+            groupItem.classList.add('bg-gray-600');
+          }
 
-      if (dmUnsubscribe) dmUnsubscribe();
+          groupItem.onclick = () => {
+            if (currentGroupId !== doc.id) {
+              selectGroup(doc.id, group.name);
+            }
+          };
 
-      dmUnsubscribe = db.collection('private_chats').doc(dmId).collection('messages').orderBy('createdAt')
-        .onSnapshot(snapshot => {
+          groupList.appendChild(groupItem);
+        });
+
+        if (!currentGroupId && snapshot.docs.length > 0) {
+          // Auto-select first group
+          const first = snapshot.docs[0];
+          selectGroup(first.id, first.data().name);
+        } else if (snapshot.docs.length === 0) {
           chatMessages.innerHTML = '';
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            const div = document.createElement('div');
-            div.className = 'bg-gray-800 p-2 rounded';
-            div.textContent = ${data.text};
-            if(data.uid === currentUser.uid) div.classList.add('text-green-400');
-            chatMessages.appendChild(div);
-          });
-          chatMessages.scrollTop = chatMessages.scrollHeight;
-        });
-    }
-
-    // Back to groups button click
-    backToGroupsBtn.onclick = () => {
-      resetChatArea();
-      showGroupsSidebar();
-    };
-
-    // Create new DM
-    createDmForm.onsubmit = async (e) => {
-      e.preventDefault();
-      const email = dmEmailInput.value.trim();
-      if (!email || email === currentUser.email) {
-        alert("Enter a valid different user's email.");
-        return;
-      }
-      // Find user by email
-      const userQuery = await db.collection('users').where('email', '==', email).get();
-      if (userQuery.empty) {
-        alert("User not found.");
-        return;
-      }
-      const otherUser = userQuery.docs[0];
-      const otherUserId = otherUser.id;
-
-      // Check if DM already exists between users
-      const existingDMQuery = await db.collection('private_chats')
-        .where('participants', 'array-contains', currentUser.uid)
-        .get();
-
-      let dmId = null;
-      existingDMQuery.forEach(doc => {
-        const chat = doc.data();
-        if (chat.participants.includes(otherUserId) && chat.participants.length === 2) {
-          dmId = doc.id;
+          chatTitle.textContent = 'No groups found. Create one!';
+          deleteGroupBtn.classList.add('hidden');
         }
       });
+  }
 
-      if (!dmId) {
-        // Create new DM
-        const dmDoc = await db.collection('private_chats').add({
-          participants: [currentUser.uid, otherUserId],
-          lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+  // Select group and load messages
+  let unsubscribeMessages = null;
+  let typingTimeout = null;
+
+  function selectGroup(groupId, groupName) {
+    currentGroupId = groupId;
+    chatTitle.textContent = groupName;
+    chatMessages.innerHTML = '';
+    deleteGroupBtn.classList.remove('hidden');
+    updateGroupSelectionUI();
+
+    if (unsubscribeMessages) unsubscribeMessages();
+
+    unsubscribeMessages = db.collection('groups').doc(groupId)
+      .collection('messages').orderBy('createdAt')
+      .onSnapshot(snapshot => {
+        snapshot.docChanges().forEach(change => {
+          if (change.type === 'added') {
+            const msg = change.doc.data();
+            displayMessage(change.doc.id, msg);
+          }
+          if (change.type === 'modified') {
+            updateMessageReactions(change.doc.id, change.doc.data());
+          }
+          if (change.type === 'removed') {
+            removeMessage(change.doc.id);
+          }
         });
-        dmId = dmDoc.id;
-      }
+        scrollChatToBottom();
+      });
 
-      dmEmailInput.value = '';
-      selectDirectMessage(dmId, email);
-      showDirectMessagesSidebar();
+    setupTypingListener(groupId);
+  }
+
+  function updateGroupSelectionUI() {
+    [...groupList.children].forEach(child => {
+      child.classList.toggle('bg-gray-600', child.dataset.id === currentGroupId);
+    });
+  }
+
+  // Display message
+  function displayMessage(msgId, msg) {
+    if(document.getElementById(msgId)) return; // avoid duplicates
+
+    const isCurrentUser = msg.senderId === currentUser.uid;
+
+    const msgDiv = document.createElement('div');
+    msgDiv.id = msgId;
+    msgDiv.className = `flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`;
+
+    const bubble = document.createElement('div');
+    bubble.className = `max-w-xs p-2 rounded-lg relative ${isCurrentUser ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}`;
+
+    // Message content: text or image or audio
+    if (msg.type === 'text') {
+      bubble.textContent = msg.text;
+    } else if (msg.type === 'image') {
+      const img = document.createElement('img');
+      img.src = msg.imageUrl;
+      img.alt = 'Image message';
+      img.className = 'max-w-xs rounded cursor-pointer';
+      img.onclick = () => window.open(msg.imageUrl, '_blank');
+      bubble.appendChild(img);
+    } else if (msg.type === 'audio') {
+      const audio = document.createElement('audio');
+      audio.controls = true;
+      audio.src = msg.audioUrl;
+      bubble.appendChild(audio);
+    }
+
+    // Reactions container
+    const reactionsContainer = document.createElement('div');
+    reactionsContainer.className = 'flex space-x-1 mt-1 text-sm cursor-pointer select-none';
+    bubble.appendChild(reactionsContainer);
+
+    // Show existing reactions
+    updateReactionsUI(reactionsContainer, msg.reactions);
+
+    // Add reaction event
+    bubble.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      showReactionPicker(e.pageX, e.pageY, msgId);
+    });
+
+    // Read receipts
+    const readReceiptDiv = document.createElement('div');
+    readReceiptDiv.className = 'text-xs text-gray-400 mt-1 text-right';
+    if (msg.readBy) {
+      const readers = Object.keys(msg.readBy).filter(uid => msg.readBy[uid] === true && uid !== currentUser.uid);
+      if (readers.length > 0) {
+        readReceiptDiv.textContent = `Read by ${readers.length}`;
+      }
+    }
+    bubble.appendChild(readReceiptDiv);
+
+    msgDiv.appendChild(bubble);
+    chatMessages.appendChild(msgDiv);
+
+    // Mark message as read
+    markMessageRead(msgId);
+  }
+
+  // Update reactions UI
+  function updateReactionsUI(container, reactions) {
+    container.innerHTML = '';
+    if (!reactions) return;
+    for (const [emoji, users] of Object.entries(reactions)) {
+      const count = Object.keys(users).length;
+      if (count > 0) {
+        const btn = document.createElement('button');
+        btn.textContent = `${emoji} ${count}`;
+        btn.className = 'bg-gray-600 rounded px-1';
+        container.appendChild(btn);
+      }
+    }
+  }
+
+  // Update reactions on modified message
+  function updateMessageReactions(msgId, msgData) {
+    const msgDiv = document.getElementById(msgId);
+    if (!msgDiv) return;
+    const reactionsContainer = msgDiv.querySelector('div > div:last-child > div');
+    if (reactionsContainer) {
+      updateReactionsUI(reactionsContainer, msgData.reactions);
+    }
+  }
+
+  // Remove message on delete
+  function removeMessage(msgId) {
+    const msgDiv = document.getElementById(msgId);
+    if (msgDiv) msgDiv.remove();
+  }
+
+  // Scroll chat to bottom
+  function scrollChatToBottom() {
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  // Send message handler
+  async function sendMessage(type, content) {
+    if (!currentGroupId) {
+      alert('Please select a group first.');
+      return;
+    }
+    if (type === 'text' && (!content || content.trim() === '')) return;
+
+    const messageData = {
+      senderId: currentUser.uid,
+      senderName: userNameSidebar.textContent,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      type: type,
+      readBy: { [currentUser.uid]: true }
     };
 
-    // Show groups sidebar and hide direct messages (optional UI control)
-    function showGroupsSidebar() {
-      groupList.parentElement.style.display = 'block';
-      dmList.parentElement.style.display = 'block';
-      backToGroupsBtn.classList.add('hidden');
+    if (type === 'text') {
+      messageData.text = content;
+    } else if (type === 'image') {
+      messageData.imageUrl = content;
+    } else if (type === 'audio') {
+      messageData.audioUrl = content;
     }
 
-    function showDirectMessagesSidebar() {
-      // You can customize UI to highlight DM section or hide groups
-      backToGroupsBtn.classList.remove('hidden');
+    await db.collection('groups').doc(currentGroupId).collection('messages').add(messageData);
+  }
+
+  sendMessageBtn.onclick = () => {
+    sendMessage('text', messageInput.value);
+    messageInput.value = '';
+    updateTypingStatus(false);
+  };
+
+  messageInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      sendMessageBtn.click();
+    }
+    updateTypingStatus(true);
+    if (typingTimeout) clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => updateTypingStatus(false), 2000);
+  });
+
+  // Image upload
+  imageUploadBtn.onclick = () => imageInput.click();
+
+  imageInput.onchange = async (e) => {
+    if (!currentGroupId) {
+      alert('Select a group first!');
+      imageInput.value = '';
+      return;
+    }
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const storageRef = storage.ref();
+    const imgRef = storageRef.child(`images/${currentUser.uid}_${Date.now()}_${file.name}`);
+    await imgRef.put(file);
+    const url = await imgRef.getDownloadURL();
+
+    sendMessage('image', url);
+    imageInput.value = '';
+  };
+
+  // Audio recording
+  recordAudioBtn.onclick = () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('Audio recording not supported');
+      return;
     }
 
-    // On user signup, save their email and uid to users collection
-    auth.onAuthStateChanged(user => {
-      if (user) {
-        db.collection('users').doc(user.uid).set({
-          email: user.email,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-      }
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      recordAudioBtn.textContent = '🎤';
+      return;
+    }
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+
+      mediaRecorder.ondataavailable = e => {
+        audioChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const storageRef = storage.ref();
+        const audioRef = storageRef.child(`audio/${currentUser.uid}_${Date.now()}.webm`);
+        await audioRef.put(audioBlob);
+        const url = await audioRef.getDownloadURL();
+
+        sendMessage('audio', url);
+      };
+
+      mediaRecorder.start();
+      recordAudioBtn.textContent = '⏹️';
+    }).catch(() => alert('Microphone access denied'));
+  };
+
+  // Typing indicator
+  let typingRef = null;
+  function setupTypingListener(groupId) {
+    if (typingRef) typingRef();
+
+    typingRef = db.collection('groups').doc(groupId).collection('typing').doc(currentUser.uid);
+    const typingDocRef = db.collection('groups').doc(groupId).collection('typing');
+
+    // Listen to typing by others
+    typingDocRef.onSnapshot(snapshot => {
+      let typingUsers = [];
+      snapshot.forEach(doc => {
+        if (doc.id !== currentUser.uid && doc.data().typing) {
+          typingUsers.push(doc.id);
+        }
+      });
+      typingIndicator.textContent = typingUsers.length > 0 ? 'Someone is typing...' : '';
     });
-  </script>
+  }
+
+  function updateTypingStatus(isTyping) {
+    if (!currentGroupId) return;
+    db.collection('groups').doc(currentGroupId).collection('typing').doc(currentUser.uid).set({
+      typing: isTyping
+    });
+  }
+
+  // Mark message read
+  async function markMessageRead(msgId) {
+    if (!currentGroupId) return;
+    const msgRef = db.collection('groups').doc(currentGroupId).collection('messages').doc(msgId);
+    await msgRef.set({
+      readBy: { [currentUser.uid]: true }
+    }, { merge: true });
+  }
+
+  // Create new group
+  newGroupBtn.onclick = async () => {
+    const groupName = prompt('Enter group name:');
+    if (!groupName) return;
+
+    const groupRef = await db.collection('groups').add({
+      name: groupName,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      members: [currentUser.uid]
+    });
+    selectGroup(groupRef.id, groupName);
+  };
+
+  // Delete group (only if current user is a member)
+  deleteGroupBtn.onclick = async () => {
+    if (!currentGroupId) return;
+    if (!confirm('Delete this group? This action cannot be undone.')) return;
+
+    // Delete messages subcollection first
+    const messagesSnapshot = await db.collection('groups').doc(currentGroupId).collection('messages').get();
+    const batch = db.batch();
+    messagesSnapshot.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+
+    // Delete typing subcollection
+    const typingSnapshot = await db.collection('groups').doc(currentGroupId).collection('typing').get();
+    const batch2 = db.batch();
+    typingSnapshot.forEach(doc => batch2.delete(doc.ref));
+    await batch2.commit();
+
+    // Delete group doc
+    await db.collection('groups').doc(currentGroupId).delete();
+
+    currentGroupId = null;
+    chatMessages.innerHTML = '';
+    chatTitle.textContent = 'Select a Group';
+    deleteGroupBtn.classList.add('hidden');
+    setupGroupListener();
+  };
+
+  // Theme toggle
+  themeSelect.onchange = () => {
+    if (themeSelect.value === 'dark') {
+      document.documentElement.classList.remove('light');
+      document.body.classList.add('bg-gray-900', 'text-white');
+    } else {
+      document.documentElement.classList.add('light');
+      document.body.classList.remove('bg-gray-900', 'text-white');
+      document.body.classList.add('bg-white', 'text-black');
+    }
+  };
+
+  // Reaction picker
+  const reactionEmojis = ['👍', '❤️', '😂', '😮', '😢', '👏'];
+
+  function showReactionPicker(x, y, msgId) {
+    // Remove existing picker
+    const existingPicker = document.getElementById('reactionPicker');
+    if (existingPicker) existingPicker.remove();
+
+    const picker = document.createElement('div');
+    picker.id = 'reactionPicker';
+    picker.style.position = 'absolute';
+    picker.style.top = y + 'px';
+    picker.style.left = x + 'px';
+    picker.style.background = '#333';
+    picker.style.padding = '5px';
+    picker.style.borderRadius = '8px';
+    picker.style.display = 'flex';
+    picker.style.gap = '8px';
+    picker.style.zIndex = 9999;
+
+    reactionEmojis.forEach(emoji => {
+      const btn = document.createElement('button');
+      btn.textContent = emoji;
+      btn.style.fontSize = '20px';
+      btn.style.background = 'transparent';
+      btn.style.border = 'none';
+      btn.style.cursor = 'pointer';
+      btn.onclick = () => {
+        addReaction(msgId, emoji);
+        picker.remove();
+      };
+      picker.appendChild(btn);
+    });
+
+    document.body.appendChild(picker);
+
+    // Remove picker if clicked outside
+    function removePicker(e) {
+      if (!picker.contains(e.target)) {
+        picker.remove();
+        document.removeEventListener('click', removePicker);
+      }
+    }
+    document.addEventListener('click', removePicker);
+  }
+
+  async function addReaction(msgId, emoji) {
+    if (!currentGroupId) return;
+    const msgRef = db.collection('groups').doc(currentGroupId).collection('messages').doc(msgId);
+
+    const msgDoc = await msgRef.get();
+    let reactions = msgDoc.data().reactions || {};
+
+    if (!reactions[emoji]) {
+      reactions[emoji] = {};
+    }
+
+    if (reactions[emoji][currentUser.uid]) {
+      // Remove reaction if already reacted
+      delete reactions[emoji][currentUser.uid];
+      if (Object.keys(reactions[emoji]).length === 0) {
+        delete reactions[emoji];
+      }
+    } else {
+      reactions[emoji][currentUser.uid] = true;
+    }
+
+    await msgRef.update({ reactions });
+  }
+</script>
+
 </body>
 </html>
