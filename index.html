@@ -125,8 +125,8 @@
             snapshot.forEach(doc => {
               const msg = doc.data();
               const msgDiv = document.createElement("div");
-              msgDiv.textContent = `${msg.sender}: ${msg.text}`;
-              msgDiv.className = "p-2 rounded bg-gray-700";
+              msgDiv.className = `p-2 rounded max-w-xs ${msg.sender === currentUser.email ? 'bg-blue-600 ml-auto text-right' : 'bg-gray-700 mr-auto'}`;
+              msgDiv.innerHTML = `<div class='text-sm'>${msg.sender}</div><div>${msg.text}</div>`;
               messagesDiv.appendChild(msgDiv);
               messagesDiv.scrollTop = messagesDiv.scrollHeight;
             });
